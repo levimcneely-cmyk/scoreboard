@@ -203,6 +203,7 @@ const ordinal = n => { n = Number(n); const s=['th','st','nd','rd'], v=n%100; re
 const stType = e => e?.competitions?.[0]?.status?.type || e?.status?.type || {};
 const isFinal = e => stType(e).completed === true;
 const isLive  = e => stType(e).state === 'in';
+const isPre   = e => String(e?.seasonType?.type ?? e?.season?.type ?? '') === '1' || /pre/i.test(e?.seasonType?.name || '');
 const scoreOf = c => { const s = c?.score; if(s == null) return null; return typeof s === 'object' ? (s.displayValue ?? s.value) : s; };
 const rankOf  = c => { const r = c?.curatedRank?.current; return r && r <= 25 ? r : null; };
 
@@ -292,6 +293,7 @@ async function loadTeam(cfg){
     .filter(e => isLive(e) || new Date(e.date) > Date.now() - 4*3600e3)
     .sort((a,b) => new Date(a.date) - new Date(b.date));
   const nxt = upcoming.find(isLive) || upcoming[0];
+  const nextReal = upcoming.find(e => !isPre(e));   // preseason games don't make a team "in season"
 
   // standings + record
   const items = t.record?.items || [];
@@ -355,6 +357,7 @@ async function loadTeam(cfg){
         d: dayLabel(d), dsub: [tbd ? 'Time TBA' : timeLabel(d), tv].filter(Boolean).join(', ') });
     }
     m.nextDate = d;
+    m.seasonNextDate = nextReal ? new Date(nextReal.date) : null;
     m.slate = { date:d, tbd, live:isLive(nxt), logo:m.logo, what:`${cfg.abbr} ${oppLabel(me, opp)}`, tv };
   } else {
     m.rows.push({ k:'Next', v:'Schedule not posted', d:'' });
@@ -550,7 +553,7 @@ function finish(cfg, m){
   const now = Date.now();
   const win = NEXT_WINDOW[cfg.kind] ?? 21;
   m.inSeason = !!(m.live
-    || (m.nextDate && +new Date(m.nextDate) - now < win*DAY)
+    || ((m.seasonNextDate !== undefined ? m.seasonNextDate : m.nextDate) && +new Date(m.seasonNextDate !== undefined ? m.seasonNextDate : m.nextDate) - now < win*DAY)
     || (m.lastDate && now - +new Date(m.lastDate) < LAST_WINDOW*DAY));
   m.sortKey = m.live ? 0 : m.inSeason ? (m.nextDate ? +new Date(m.nextDate) : now + 60*DAY) : Infinity;
   m.group = cfg.group; m.key = keyOf(cfg); m.order = TEAMS.indexOf(cfg);
