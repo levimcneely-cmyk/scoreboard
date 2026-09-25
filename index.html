@@ -1,0 +1,603 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Scoreboard">
+<meta name="theme-color" content="#E7EBEF" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#131A22" media="(prefers-color-scheme: dark)">
+<title>Scoreboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#E7EBEF; --card:#FFFFFF; --ink:#16212C; --muted:#5F6B78; --faint:#8C96A1;
+  --line:#D6DCE3; --chip:#EEF1F4; --live:#D3202C; --win:#1D8048; --loss:#B8322A; --draw:#8A6D1E;
+  --cond:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;
+  --body:"Barlow",system-ui,-apple-system,sans-serif;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root{ --bg:#131A22; --card:#1C252F; --ink:#EDF1F5; --muted:#A3AEBA; --faint:#77838F;
+    --line:#2C3743; --chip:#26313C; --win:#46B478; --loss:#E0655C; --draw:#D1B45C; }
+}
+*,*::before,*::after{box-sizing:inherit}
+html{scroll-padding-top:env(safe-area-inset-top,0px);-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 15px/1.35 var(--body);
+  padding-left:env(safe-area-inset-left,0px);padding-right:env(safe-area-inset-right,0px)}
+.wrap{max-width:560px;margin:0 auto;padding:14px 14px 40px}
+button{font:inherit;color:inherit}
+a{color:inherit}
+
+/* Masthead */
+.mast{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding:6px 2px 12px}
+.mast h1{margin:0;font:700 34px/0.95 var(--cond);letter-spacing:-0.01em}
+.mast .sub{color:var(--muted);font-size:13px;margin-top:4px}
+.refresh{border:1px solid var(--line);background:var(--card);border-radius:999px;padding:7px 13px;font-size:13px;font-weight:600;cursor:pointer}
+.refresh:disabled{opacity:.5}
+.refresh:focus-visible,.tab:focus-visible,.card a:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+
+/* Up next strip */
+.slate{background:var(--card);border-radius:16px;padding:6px 0;margin-bottom:14px}
+.slate h2{font:600 15px/1 var(--body);color:var(--muted);margin:10px 14px 6px}
+.srow{display:grid;grid-template-columns:78px 26px 1fr auto;align-items:center;gap:10px;padding:8px 14px;border-top:1px solid var(--line)}
+.srow:first-of-type{border-top:0}
+.srow .when{font:600 15px/1.1 var(--cond)}
+.srow .when small{display:block;font:500 13px/1.1 var(--cond);color:var(--muted)}
+.srow .what{font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.srow .tv{font-size:12px;color:var(--muted);text-align:right}
+.srow.fam .what::after{content:"family";margin-left:6px;font-size:11px;color:var(--faint)}
+.slate .empty{padding:8px 14px 12px;color:var(--muted)}
+
+/* Tabs */
+.tabs{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;display:grid;grid-template-columns:1fr 1fr;gap:4px;
+  background:var(--bg);padding:6px 0 10px}
+.tabs-inner{display:grid;grid-template-columns:1fr 1fr;background:var(--chip);border-radius:11px;padding:3px;grid-column:1/-1}
+.tab{border:0;background:transparent;border-radius:9px;padding:8px;font-weight:600;cursor:pointer;color:var(--muted)}
+.tab[aria-selected="true"]{background:var(--card);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+
+/* Cards */
+.list{display:grid;gap:10px}
+.card{position:relative;background:var(--card);border-radius:14px;padding:12px 14px 12px 18px;overflow:hidden}
+.card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:6px;background:var(--tc,#888)}
+.card.off{opacity:.55;filter:grayscale(1)}
+.card.off::after{content:"Offseason";position:absolute;right:12px;top:12px;font-size:11px;font-weight:600;color:var(--muted);
+  background:var(--chip);padding:2px 7px;border-radius:6px}
+.head{display:grid;grid-template-columns:38px 1fr auto;gap:10px;align-items:center}
+.logo{width:38px;height:38px;object-fit:contain}
+.mono{width:38px;height:38px;border-radius:9px;background:var(--tc);color:#fff;display:grid;place-items:center;font:700 14px/1 var(--cond);letter-spacing:.02em}
+.name{font:700 21px/1 var(--cond)}
+.name a{text-decoration:none}
+.chips{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+.chip{font-size:12px;color:var(--muted);background:var(--chip);border-radius:6px;padding:1px 6px}
+.chip.rank{color:var(--ink);font-weight:600}
+.big{font:700 26px/1 var(--cond);text-align:right;white-space:nowrap}
+.big small{display:block;font:500 12px/1.2 var(--body);color:var(--muted)}
+.card.off .big{display:none}
+.rows{margin-top:10px;display:grid;gap:0}
+.row{display:grid;grid-template-columns:44px 1fr auto;gap:8px;align-items:baseline;padding:7px 0;border-top:1px solid var(--line)}
+.k{font-size:12px;color:var(--faint);font-weight:600}
+.v{font-weight:500;min-width:0}
+.v .note{display:block;font-weight:400;font-size:13px;color:var(--muted)}
+.d{text-align:right;font:500 15px/1.15 var(--cond);white-space:nowrap}
+.d small{display:block;font:500 12px/1.2 var(--body);color:var(--muted)}
+.res{display:inline-block;min-width:18px;text-align:center;font:700 14px/18px var(--cond);color:#fff;border-radius:4px;margin-right:6px}
+.res.W{background:var(--win)} .res.L{background:var(--loss)} .res.D,.res.T{background:var(--draw)}
+.form{display:flex;gap:3px;margin-top:8px;align-items:center}
+.form span{width:8px;height:8px;border-radius:2px}
+.form .W{background:var(--win)} .form .L{background:var(--loss)} .form .D,.form .T{background:var(--draw)}
+.form em{font-style:normal;font-size:11px;color:var(--faint);margin-right:4px}
+.live{color:var(--live);font-weight:700}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--live);margin-right:5px;animation:pulse 1.6s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.25}}
+@media (prefers-reduced-motion: reduce){.dot{animation:none}}
+.lb{margin:4px 0 0;padding:0;list-style:none;counter-reset:lb;font-weight:400;font-size:14px}
+.lb li{counter-increment:lb;display:grid;grid-template-columns:22px 1fr auto;gap:6px;padding:1px 0}
+.lb li::before{content:counter(lb);color:var(--faint);font:600 14px/1.35 var(--cond)}
+.lb li b{font:600 15px/1.3 var(--cond)}
+.err{color:var(--muted);font-size:13px;margin-top:8px}
+.skel{height:120px;background:var(--card);border-radius:14px;opacity:.6}
+.foot{margin-top:18px;text-align:center;font-size:12px;color:var(--faint)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="mast">
+    <div>
+      <h1 id="today">Scoreboard</h1>
+      <div class="sub" id="updated">Loading…</div>
+    </div>
+    <button class="refresh" id="refresh" type="button">Refresh</button>
+  </header>
+
+  <section class="slate" id="slate" aria-label="Coming up this week">
+    <h2>Coming up this week</h2>
+    <div class="empty">Loading…</div>
+  </section>
+
+  <nav class="tabs" role="tablist">
+    <div class="tabs-inner">
+      <button class="tab" role="tab" data-tab="mine" aria-selected="true">My teams</button>
+      <button class="tab" role="tab" data-tab="family" aria-selected="false">Family</button>
+    </div>
+  </nav>
+
+  <main class="list" id="list"></main>
+  <p class="foot">Scores from ESPN and Jolpica F1. Times shown in your local time zone.</p>
+</div>
+
+<script>
+/* ============================================================
+   CONFIG — add, remove, or reorder teams here.
+   group: "mine" or "family"
+   kind:  "team" (ESPN team sports), "f1", "indycar", "golf"
+   ============================================================ */
+const TEAMS = [
+  { group:'mine',   kind:'team', sport:'football',   league:'nfl',                     id:18,   label:'Saints', abbr:'NOLA' },
+  { group:'mine',   kind:'team', sport:'football',   league:'college-football',        id:2509, label:'Purdue Football', abbr:'PUFB' },
+  { group:'mine',   kind:'team', sport:'basketball', league:'mens-college-basketball', id:2509, label:'Purdue Basketball', abbr:'PUBB' },
+  { group:'mine',   kind:'team', sport:'baseball',   league:'mlb',                     id:30,   label:'Rays', abbr:'RAYS' },
+  { group:'mine',   kind:'team', sport:'soccer',     leagues:['eng.2','eng.1','eng.3'], id:352, label:'Wrexham', abbr:'WREX' },
+  { group:'mine',   kind:'team', sport:'soccer',     leagues:['eng.1'],                id:359,  label:'Arsenal', abbr:'ARSL' },
+  { group:'mine',   kind:'indycar', label:'Chip Ganassi Racing', abbr:'CGR', mono:'CGR', color:'#C8102E', drivers:['Palou','Dixon','Simpson'] },
+  { group:'mine',   kind:'f1',      label:'Red Bull Racing',     abbr:'RBR', mono:'RBR', color:'#1E3A8A', constructorId:'red_bull' },
+  { group:'mine',   kind:'team', sport:'basketball', league:'nba',                     id:11,   label:'Pacers', abbr:'PCRS' },
+
+  { group:'family', kind:'team', sport:'football',   league:'college-football',        id:84,   label:'IU Football', abbr:'IUFB' },
+  { group:'family', kind:'team', sport:'basketball', league:'mens-college-basketball', id:84,   label:'IU Basketball', abbr:'IUBB' },
+  { group:'family', kind:'team', sport:'football',   league:'nfl',                     id:11,   label:'Colts', abbr:'INDC' },
+  { group:'family', kind:'golf',    label:'PGA Tour', abbr:'PGA', mono:'PGA', color:'#0B3D6E' }
+];
+
+// A team counts as "in season" if its next event is within this many days
+// or its last result is within LAST_WINDOW days.
+const NEXT_WINDOW = { team:21, f1:35, indycar:35, golf:21 };
+const LAST_WINDOW = 10;
+
+/* ============================================================ */
+const ESPN = 'https://site.api.espn.com/apis/site/v2/sports';
+const ESPN_V2 = 'https://site.api.espn.com/apis/v2/sports';
+const JOLPICA = 'https://api.jolpi.ca/ergast/f1';
+const CACHE_KEY = 'scoreboard-cache-v1';
+const TAB_KEY = 'scoreboard-tab';
+const DAY = 864e5;
+
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const keyOf = c => `${c.kind}-${c.league||c.leagues?.[0]||''}-${c.id||c.label}`;
+
+async function getJSON(url, ms = 12000){
+  const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), ms);
+  try{
+    const r = await fetch(url, { signal: ctl.signal });
+    if(!r.ok) throw new Error(`HTTP ${r.status}`);
+    return await r.json();
+  } finally { clearTimeout(t); }
+}
+const soft = p => p.catch(() => null);
+
+/* ---------- date helpers ---------- */
+function dayLabel(d){
+  const now = new Date(); const t0 = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const diff = Math.round((new Date(d.getFullYear(), d.getMonth(), d.getDate()) - t0) / DAY);
+  if(diff === 0) return 'Today';
+  if(diff === 1) return 'Tomorrow';
+  if(diff === -1) return 'Yesterday';
+  if(diff > 1 && diff < 7) return d.toLocaleDateString([], { weekday:'long' });
+  return d.toLocaleDateString([], { weekday:'short', month:'short', day:'numeric' });
+}
+const timeLabel = d => d.toLocaleTimeString([], { hour:'numeric', minute:'2-digit' });
+const ymd = d => { const x = new Date(d); return `${x.getFullYear()}${String(x.getMonth()+1).padStart(2,'0')}${String(x.getDate()).padStart(2,'0')}`; };
+const ordinal = n => { n = Number(n); const s=['th','st','nd','rd'], v=n%100; return n + (s[(v-20)%10]||s[v]||s[0]); };
+
+/* ---------- ESPN team sports ---------- */
+const stType = e => e?.competitions?.[0]?.status?.type || e?.status?.type || {};
+const isFinal = e => stType(e).completed === true;
+const isLive  = e => stType(e).state === 'in';
+const scoreOf = c => { const s = c?.score; if(s == null) return null; return typeof s === 'object' ? (s.displayValue ?? s.value) : s; };
+const rankOf  = c => { const r = c?.curatedRank?.current; return r && r <= 25 ? r : null; };
+
+function sides(e, teamId){
+  const comp = e?.competitions?.[0] || {};
+  const cs = comp.competitors || [];
+  const me = cs.find(c => String(c.team?.id ?? c.id) === String(teamId)) || cs[0];
+  const opp = cs.find(c => c !== me) || {};
+  return { comp, me, opp };
+}
+function oppLabel(me, opp){
+  const pre = me?.homeAway === 'away' ? '@' : 'vs';
+  const r = rankOf(opp);
+  const nm = opp?.team?.shortDisplayName || opp?.team?.displayName || opp?.team?.abbreviation || 'TBD';
+  return `${pre} ${r ? '#'+r+' ' : ''}${nm}`;
+}
+function resultLetter(me, opp, soccer){
+  if(me?.winner === true) return 'W';
+  if(opp?.winner === true) return 'L';
+  const a = parseFloat(scoreOf(me)), b = parseFloat(scoreOf(opp));
+  if(!isNaN(a) && !isNaN(b)){ if(a > b) return 'W'; if(a < b) return 'L'; return soccer ? 'D' : 'T'; }
+  return '';
+}
+function tvOf(comp){
+  const b = comp?.broadcasts?.[0];
+  return b?.media?.shortName || b?.names?.[0] || comp?.geoBroadcasts?.[0]?.media?.shortName || '';
+}
+
+async function loadTeam(cfg){
+  const leagues = cfg.leagues || [cfg.league];
+  let tj = null, league = null;
+  for(const lg of leagues){
+    const j = await soft(getJSON(`${ESPN}/${cfg.sport}/${lg}/teams/${cfg.id}`));
+    if(j?.team){ tj = j; league = lg; break; }
+  }
+  if(!tj) throw new Error('Team lookup failed');
+  const t = tj.team;
+  const base = `${ESPN}/${cfg.sport}/${league}/teams/${cfg.id}/schedule`;
+  const soccer = cfg.sport === 'soccer';
+
+  const sched = await soft(getJSON(base));
+  let events = sched?.events || [];
+  if(soccer){ // upcoming fixtures live on a separate list for soccer
+    const fx = await soft(getJSON(`${base}?fixture=true`));
+    events = events.concat(fx?.events || []);
+  }
+  let done = events.filter(isFinal);
+  if(!done.length && sched?.season?.year){
+    const prev = await soft(getJSON(`${base}?season=${sched.season.year - 1}`));
+    done = (prev?.events || []).filter(isFinal);
+  }
+  done.sort((a,b) => new Date(a.date) - new Date(b.date));
+  const last = done.at(-1);
+
+  const seen = new Set();
+  const upcoming = [...(t.nextEvent || []), ...events.filter(e => !isFinal(e))]
+    .filter(e => e && !seen.has(e.id) && seen.add(e.id))
+    .filter(e => isLive(e) || new Date(e.date) > Date.now() - 4*3600e3)
+    .sort((a,b) => new Date(a.date) - new Date(b.date));
+  const nxt = upcoming.find(isLive) || upcoming[0];
+
+  // standings + record
+  const items = t.record?.items || [];
+  const total = items.find(i => i.type === 'total') || items[0];
+  const conf = items.find(i => /conf/i.test(`${i.type} ${i.description} ${i.name}`));
+  const stat = (it, n) => it?.stats?.find(s => s.name === n)?.value;
+  const chips = [];
+  if(t.rank && t.rank <= 25) chips.push({ t:`#${t.rank} AP`, cls:'rank' });
+  if(t.standingSummary) chips.push({ t:t.standingSummary });
+  if(conf?.summary) chips.push({ t:`${conf.summary} conf` });
+  const gb = stat(total, 'gamesBehind');
+  if(cfg.league === 'mlb' && gb != null && gb > 0) chips.push({ t:`${gb} GB` });
+
+  let big = total?.summary || '', bigSub = '';
+  if(soccer){
+    const pts = stat(total, 'points');
+    if(pts != null){ big = `${pts} pts`; bigSub = total?.summary ? `${total.summary} W-D-L` : ''; }
+  }
+
+  const m = {
+    name: cfg.label, logo: t.logos?.[0]?.href, color: t.color ? '#'+t.color : '#888',
+    link: t.links?.[0]?.href, chips, big, bigSub, rows: [], form: []
+  };
+
+  if(last){
+    const { me, opp } = sides(last, cfg.id);
+    const L = resultLetter(me, opp, soccer);
+    const d = new Date(last.date);
+    const old = Date.now() - d > 120*DAY;
+    m.rows.push({ k:'Last', res:L,
+      v:`${esc(scoreOf(me))}–${esc(scoreOf(opp))} ${esc(oppLabel(me, opp))}`,
+      note: old ? 'Last season' : (last.competitions?.[0]?.notes?.[0]?.headline || ''),
+      d: dayLabel(d), dsub: d.getFullYear() !== new Date().getFullYear() ? String(d.getFullYear()) : '' });
+    m.lastDate = d;
+    m.form = done.slice(-5).map(e => { const s = sides(e, cfg.id); return resultLetter(s.me, s.opp, soccer); }).filter(Boolean);
+  } else {
+    m.rows.push({ k:'Last', v:'No games yet', d:'' });
+  }
+
+  if(nxt){
+    const { comp, me, opp } = sides(nxt, cfg.id);
+    const d = new Date(nxt.date);
+    const tbd = comp.timeValid === false || /TBD/i.test(stType(nxt).detail || '');
+    const tv = tvOf(comp);
+    const pre = /pre/i.test(nxt.seasonType?.name || '') ? 'Preseason' : '';
+    const cup = comp.notes?.[0]?.headline || '';
+    if(isLive(nxt)){
+      m.live = true;
+      m.rows.push({ k:'Now', live:true,
+        v:`${esc(scoreOf(me) ?? 0)}–${esc(scoreOf(opp) ?? 0)} ${esc(oppLabel(me, opp))}`,
+        d: esc(stType(nxt).shortDetail || 'Live'), dsub: tv });
+    } else {
+      m.rows.push({ k:'Next', v: esc(oppLabel(me, opp)),
+        note: [pre, cup].filter(Boolean).join(', '),
+        d: dayLabel(d), dsub: [tbd ? 'Time TBA' : timeLabel(d), tv].filter(Boolean).join(', ') });
+    }
+    m.nextDate = d;
+    m.slate = { date:d, tbd, live:isLive(nxt), logo:m.logo, what:`${cfg.abbr} ${oppLabel(me, opp)}`, tv };
+  } else {
+    m.rows.push({ k:'Next', v:'Schedule not posted', d:'' });
+  }
+  return m;
+}
+
+/* ---------- F1 (Jolpica) ---------- */
+async function loadF1(cfg){
+  const [lastJ, nextJ, consJ, drvJ] = await Promise.all([
+    soft(getJSON(`${JOLPICA}/current/last/results.json`)),
+    soft(getJSON(`${JOLPICA}/current/next.json`)),
+    soft(getJSON(`${JOLPICA}/current/constructorstandings.json`)),
+    soft(getJSON(`${JOLPICA}/current/driverstandings.json`))
+  ]);
+  if(!lastJ && !nextJ && !consJ) throw new Error('F1 data unavailable');
+  const cid = cfg.constructorId;
+  const m = { name:cfg.label, mono:cfg.mono, color:cfg.color, link:'https://www.formula1.com/en/results', chips:[], rows:[], big:'', bigSub:'' };
+
+  const cons = consJ?.MRData?.StandingsTable?.StandingsLists?.[0]?.ConstructorStandings || [];
+  const mine = cons.find(c => c.Constructor?.constructorId === cid);
+  if(mine){
+    m.big = `P${mine.position}`; m.bigSub = `${mine.points} pts`;
+    const leader = cons[0];
+    if(leader && leader !== mine) m.chips.push({ t:`${Number(leader.points) - Number(mine.points)} pts behind ${leader.Constructor.name}` });
+    else if(leader === mine) m.chips.push({ t:'Leading constructors', cls:'rank' });
+  }
+  const drv = drvJ?.MRData?.StandingsTable?.StandingsLists?.[0]?.DriverStandings || [];
+  drv.filter(d => d.Constructors?.some(c => c.constructorId === cid))
+     .forEach(d => m.chips.push({ t:`${d.Driver.familyName} ${ordinal(d.position)}, ${d.points} pts` }));
+
+  const race = lastJ?.MRData?.RaceTable?.Races?.[0];
+  if(race){
+    const d = new Date(`${race.date}T${race.time || '12:00:00Z'}`);
+    const res = race.Results || [];
+    const ours = res.filter(r => r.Constructor?.constructorId === cid)
+      .map(r => `${r.Driver.familyName} ${/^\d+$/.test(r.positionText) ? 'P'+r.position : r.status}`).join(', ');
+    const win = res[0];
+    const weWon = win?.Constructor?.constructorId === cid;
+    m.rows.push({ k:'Last', res: weWon ? 'W' : '', v: esc(race.raceName.replace(' Grand Prix',' GP')),
+      note: `${ours}${win && !weWon ? `. Won by ${win.Driver.familyName}` : ''}`, d: dayLabel(d) });
+    m.lastDate = d;
+  }
+  const nr = nextJ?.MRData?.RaceTable?.Races?.[0];
+  if(nr){
+    const d = new Date(`${nr.date}T${nr.time || '12:00:00Z'}`);
+    m.rows.push({ k:'Next', v: esc(nr.raceName.replace(' Grand Prix',' GP')),
+      note: [nr.Circuit?.Location?.locality, nr.Sprint ? 'Sprint weekend' : ''].filter(Boolean).join(', '),
+      d: dayLabel(d), dsub: nr.time ? timeLabel(d) : 'Time TBA' });
+    m.nextDate = d;
+    m.slate = { date:d, tbd:!nr.time, mono:cfg.mono, color:cfg.color, what:`${cfg.abbr} ${nr.raceName.replace(' Grand Prix',' GP')}`, tv:'' };
+  } else {
+    m.rows.push({ k:'Next', v:'Season complete', d:'' });
+  }
+  return m;
+}
+
+/* ---------- ESPN racing / golf shared bits ---------- */
+function calendarOf(sb){
+  return (sb?.leagues?.[0]?.calendar || []).map(c => {
+    const s = new Date(c.startDate || c.date || c.value);
+    const e = c.endDate ? new Date(c.endDate) : new Date(+s + 3*DAY);
+    return { id:c.id, label:c.label || c.name || '', start:s, end:e };
+  }).filter(c => !isNaN(c.start)).sort((a,b) => a.start - b.start);
+}
+const raceComp = ev => { const cs = ev?.competitions || []; return cs.find(c => /race/i.test(`${c.type?.abbreviation} ${c.type?.text}`)) || cs.at(-1); };
+const athleteName = c => c?.athlete?.displayName || c?.athlete?.fullName || c?.athlete?.shortName || '';
+const lastName = n => n.split(' ').slice(1).join(' ') || n;
+
+async function eventOn(sport, lg, date, label){
+  const sb = await soft(getJSON(`${ESPN}/${sport}/${lg}/scoreboard?dates=${ymd(date)}`));
+  const evs = sb?.events || [];
+  return evs.find(e => label && e.name && e.name.toLowerCase().includes(label.toLowerCase().slice(0,12))) || evs[0];
+}
+
+/* ---------- IndyCar (ESPN) ---------- */
+async function loadIndyCar(cfg){
+  const sb = await getJSON(`${ESPN}/racing/irl/scoreboard`);
+  const cal = calendarOf(sb);
+  const now = Date.now();
+  const m = { name:cfg.label, mono:cfg.mono, color:cfg.color, link:'https://www.espn.com/racing/standings/_/series/indycar', chips:[], rows:[], big:'', bigSub:'' };
+  const ours = n => cfg.drivers.some(x => n.toLowerCase().includes(x.toLowerCase()));
+
+  // Standings
+  const stJ = await soft(getJSON(`${ESPN_V2}/racing/irl/standings`));
+  const entries = [];
+  (function walk(o){ if(!o || typeof o !== 'object') return; if(Array.isArray(o)) return o.forEach(walk);
+    if(o.athlete && Array.isArray(o.stats)) entries.push(o); else Object.values(o).forEach(walk); })(stJ);
+  const sv = (e, names) => { const s = e.stats.find(s => names.includes(s.name) || names.includes(s.abbreviation)); return s ? (s.displayValue ?? s.value) : null; };
+  const team = entries.map((e,i) => ({ n:athleteName(e), pos: sv(e,['rank','position','RK']) ?? i+1, pts: sv(e,['championshipPts','points','PTS']) }))
+    .filter(x => ours(x.n)).sort((a,b) => a.pos - b.pos);
+  if(team.length){
+    m.big = `P${team[0].pos}`; m.bigSub = `${lastName(team[0].n)}${team[0].pts ? ', '+team[0].pts+' pts' : ''}`;
+    team.forEach(x => m.chips.push({ t:`${lastName(x.n)} ${ordinal(x.pos)}`, cls: Number(x.pos) === 1 ? 'rank' : '' }));
+  }
+
+  // Last race
+  const lastCal = [...cal].reverse().find(c => c.end < now);
+  let lastEv = (sb.events || []).find(e => isFinal(e) || stType(raceComp(e)).completed);
+  if(!lastEv && lastCal) lastEv = await eventOn('racing','irl', lastCal.end, lastCal.label);
+  if(lastEv){
+    const rc = raceComp(lastEv);
+    const fin = [...(rc?.competitors || [])].sort((a,b) => (a.order ?? 99) - (b.order ?? 99));
+    const win = fin[0];
+    const best = fin.filter(c => ours(athleteName(c))).slice(0,3).map(c => `${lastName(athleteName(c))} P${c.order}`).join(', ');
+    const d = new Date(rc?.date || lastEv.date);
+    const weWon = win && ours(athleteName(win));
+    m.rows.push({ k:'Last', res: weWon ? 'W' : '', v: esc(lastEv.name || lastCal?.label || 'Last race'),
+      note: `${best}${win && !weWon ? `. Won by ${lastName(athleteName(win))}` : ''}`, d: dayLabel(d) });
+    m.lastDate = d;
+  }
+
+  // Next race
+  const nextCal = cal.find(c => c.end > now);
+  if(nextCal){
+    const ev = (sb.events || []).find(e => !isFinal(e) && Math.abs(new Date(e.date) - nextCal.start) < 5*DAY);
+    const rc = ev ? raceComp(ev) : null;
+    const d = rc?.date ? new Date(rc.date) : nextCal.start;
+    const tv = rc ? tvOf(rc) : '';
+    m.rows.push({ k:'Next', v: esc(nextCal.label), d: dayLabel(d), dsub: [rc?.date ? timeLabel(d) : 'Time TBA', tv].filter(Boolean).join(', ') });
+    m.nextDate = d;
+    m.slate = { date:d, tbd:!rc?.date, mono:cfg.mono, color:cfg.color, what:`${cfg.abbr} ${nextCal.label}`, tv };
+  } else {
+    m.rows.push({ k:'Next', v:'Season complete', note:'Schedule for next year not posted yet', d:'' });
+  }
+  return m;
+}
+
+/* ---------- PGA Tour (ESPN) ---------- */
+function standingEntries(j){
+  const out = [];
+  (function walk(o){ if(!o || typeof o !== 'object') return; if(Array.isArray(o)) return o.forEach(walk);
+    if(o.athlete && Array.isArray(o.stats)) out.push(o); else Object.values(o).forEach(walk); })(j);
+  return out;
+}
+async function loadGolf(cfg){
+  const sb = await getJSON(`${ESPN}/golf/pga/scoreboard`);
+  const cal = calendarOf(sb);
+  const now = Date.now();
+  const m = { name:cfg.label, mono:cfg.mono, color:cfg.color, link:'https://www.espn.com/golf/leaderboard', chips:[], rows:[], big:'', bigSub:'' };
+  const ev = sb.events?.[0];
+  const board = e => [...(e?.competitions?.[0]?.competitors || [])].sort((a,b) => (a.order ?? a.sortOrder ?? 999) - (b.order ?? b.sortOrder ?? 999));
+  const scoreStr = c => typeof c.score === 'object' ? (c.score?.displayValue ?? '') : (c.score ?? '');
+  const top5 = e => board(e).slice(0,5).map(c => ({ n:athleteName(c), s:scoreStr(c) }));
+
+  // Live tournament leaderboard
+  if(ev && isLive(ev)){
+    m.live = true;
+    m.rows.push({ k:'Now', live:true, v: esc(ev.name), lines: top5(ev), d: esc(stType(ev).shortDetail || 'Live'), dsub: tvOf(ev.competitions?.[0]) });
+    m.nextDate = new Date();
+    m.slate = { date:new Date(), live:true, mono:cfg.mono, color:cfg.color, what:`${cfg.abbr} ${ev.name}`, tv: tvOf(ev.competitions?.[0]) };
+  }
+
+  // Season standings (FedExCup) top 5
+  const stJ = await soft(getJSON(`${ESPN_V2}/golf/pga/standings`));
+  const sv = (e, names) => { const s = e.stats.find(s => names.includes(s.name) || names.includes(s.abbreviation)); return s ? (s.displayValue ?? s.value) : null; };
+  const season = standingEntries(stJ)
+    .map((e,i) => ({ n:athleteName(e), pos:Number(sv(e,['rank','position','RK']) ?? i+1), pts:sv(e,['points','cupPoints','fedexPoints','PTS']) }))
+    .sort((a,b) => a.pos - b.pos).slice(0,5);
+  if(season.length) m.rows.push({ k:'Season', v:'FedExCup standings', lines: season.map(x => ({ n:x.n, s: x.pts ? `${x.pts} pts` : '' })), d:'' });
+
+  // Last completed tournament top 5
+  let last = null;
+  if(ev && isFinal(ev)) last = ev;
+  else {
+    const lc = [...cal].reverse().find(c => c.end < now);
+    if(lc) last = await eventOn('golf','pga', lc.end, lc.label);
+    if(last && !isFinal(last)) last = null;
+  }
+  if(last){
+    const d = new Date(last.endDate || last.date);
+    m.rows.push({ k:'Last', v: esc(last.name), lines: top5(last), d: dayLabel(d) });
+    m.lastDate = d;
+  }
+
+  // Next tournament
+  if(!m.live){
+    const nc = (ev && !isFinal(ev)) ? { label:ev.name, start:new Date(ev.date), end:new Date(ev.endDate || +new Date(ev.date)+3*DAY) } : cal.find(c => c.start > now);
+    if(nc){
+      m.rows.push({ k:'Next', v: esc(nc.label), d: dayLabel(nc.start),
+        dsub: `through ${nc.end.toLocaleDateString([], { month:'short', day:'numeric' })}` });
+      m.nextDate = nc.start;
+      m.slate = { date:nc.start, tbd:true, mono:cfg.mono, color:cfg.color, what:`${cfg.abbr} ${nc.label}`, tv:'' };
+    } else m.rows.push({ k:'Next', v:'Season complete', d:'' });
+  }
+  return m;
+}
+
+const LOADERS = { team:loadTeam, f1:loadF1, indycar:loadIndyCar, golf:loadGolf };
+
+/* ---------- season + sort ---------- */
+function finish(cfg, m){
+  const now = Date.now();
+  const win = NEXT_WINDOW[cfg.kind] ?? 21;
+  m.inSeason = !!(m.live
+    || (m.nextDate && +new Date(m.nextDate) - now < win*DAY)
+    || (m.lastDate && now - +new Date(m.lastDate) < LAST_WINDOW*DAY));
+  m.sortKey = m.live ? 0 : m.inSeason ? (m.nextDate ? +new Date(m.nextDate) : now + 60*DAY) : Infinity;
+  m.group = cfg.group; m.key = keyOf(cfg); m.order = TEAMS.indexOf(cfg);
+  return m;
+}
+
+/* ---------- render ---------- */
+let state = {};   // key -> model
+let tab = localStorage.getItem(TAB_KEY) || 'mine';
+
+function badge(m){
+  return m.logo
+    ? `<img class="logo" src="${esc(m.logo)}" alt="" loading="lazy">`
+    : `<div class="mono" style="--tc:${esc(m.color)}">${esc(m.mono || m.name.slice(0,3))}</div>`;
+}
+function cardHTML(m){
+  if(m.error) return `<article class="card off" style="--tc:${esc(m.color||'#888')}">
+      <div class="head">${badge(m)}<div><div class="name">${esc(m.name)}</div></div><div></div></div>
+      <p class="err">Couldn't load this one right now. Tap Refresh to try again.</p></article>`;
+  const rows = m.rows.map(r => `<div class="row">
+      <span class="k">${r.k}</span>
+      <span class="v ${r.live ? 'live' : ''}">${r.live ? '<span class="dot" aria-hidden="true"></span>' : ''}${r.res ? `<span class="res ${r.res}">${r.res}</span>` : ''}${r.v}${r.note ? `<span class="note">${esc(r.note)}</span>` : ''}${r.lines ? `<ol class="lb">${r.lines.map(l => `<li><span>${esc(l.n)}</span><b>${esc(l.s)}</b></li>`).join('')}</ol>` : ''}</span>
+      <span class="d">${r.d || ''}${r.dsub ? `<small>${esc(r.dsub)}</small>` : ''}</span></div>`).join('');
+  const form = m.form?.length && m.inSeason ? `<div class="form" aria-label="Last ${m.form.length} results"><em>Form</em>${m.form.map(f => `<span class="${f}" title="${f}"></span>`).join('')}</div>` : '';
+  return `<article class="card ${m.inSeason ? '' : 'off'}" style="--tc:${esc(m.color)}">
+    <div class="head">${badge(m)}
+      <div><div class="name">${m.link ? `<a href="${esc(m.link)}" target="_blank" rel="noopener">${esc(m.name)}</a>` : esc(m.name)}</div>
+        ${m.chips.length ? `<div class="chips">${m.chips.map(c => `<span class="chip ${c.cls||''}">${esc(c.t)}</span>`).join('')}</div>` : ''}</div>
+      <div class="big">${esc(m.big)}${m.bigSub ? `<small>${esc(m.bigSub)}</small>` : ''}</div>
+    </div>
+    <div class="rows">${rows}</div>${form}</article>`;
+}
+function render(){
+  document.querySelectorAll('.tab').forEach(b => b.setAttribute('aria-selected', b.dataset.tab === tab));
+  const cfgs = TEAMS.filter(c => c.group === tab);
+  const models = cfgs.map(c => state[keyOf(c)]).filter(Boolean)
+    .sort((a,b) => (a.sortKey - b.sortKey) || (a.order - b.order));
+  const pending = cfgs.length - models.length;
+  $('#list').innerHTML = models.map(cardHTML).join('') + '<div class="skel"></div>'.repeat(Math.max(0, pending));
+
+  // Slate: everything tracked, next 7 days
+  const horizon = Date.now() + 7*DAY;
+  const items = Object.values(state).filter(m => m.slate && (m.slate.live || +new Date(m.slate.date) < horizon))
+    .map(m => ({ ...m.slate, date:new Date(m.slate.date), fam: m.group === 'family' }))
+    .sort((a,b) => (b.live - a.live) || (a.date - b.date));
+  const slate = $('#slate');
+  slate.innerHTML = '<h2>Coming up this week</h2>' + (items.length ? items.map(s => `<div class="srow ${s.fam ? 'fam' : ''}">
+      <div class="when">${s.live ? '<span class="live"><span class="dot"></span>Live</span>' : esc(dayLabel(s.date).replace('Tomorrow','Tmrw'))}${!s.live ? `<small>${s.tbd ? 'TBA' : timeLabel(s.date)}</small>` : ''}</div>
+      ${s.logo ? `<img class="logo" style="width:26px;height:26px" src="${esc(s.logo)}" alt="">` : `<div class="mono" style="width:26px;height:26px;font-size:10px;border-radius:6px;--tc:${esc(s.color)}">${esc(s.mono||'')}</div>`}
+      <div class="what">${esc(s.what)}</div><div class="tv">${esc(s.tv||'')}</div></div>`).join('')
+    : '<div class="empty">Nothing on the schedule in the next 7 days.</div>');
+}
+
+/* ---------- load / cache ---------- */
+function saveCache(){ try{ localStorage.setItem(CACHE_KEY, JSON.stringify({ at:Date.now(), state })); }catch(e){} }
+function loadCache(){ try{ const c = JSON.parse(localStorage.getItem(CACHE_KEY)); if(c?.state){ state = c.state; return c.at; } }catch(e){} return null; }
+
+let timer = null;
+async function refreshAll(){
+  const btn = $('#refresh'); btn.disabled = true; btn.textContent = 'Updating…';
+  await Promise.all(TEAMS.map(async cfg => {
+    try{ state[keyOf(cfg)] = finish(cfg, await LOADERS[cfg.kind](cfg)); }
+    catch(e){
+      const prev = state[keyOf(cfg)];
+      if(!prev) state[keyOf(cfg)] = finish(cfg, { name:cfg.label, mono:cfg.mono, color:cfg.color, error:true, chips:[], rows:[] });
+    }
+    render();
+  }));
+  saveCache();
+  $('#updated').textContent = `Updated ${timeLabel(new Date())}`;
+  btn.disabled = false; btn.textContent = 'Refresh';
+  clearTimeout(timer);
+  const anyLive = Object.values(state).some(m => m.live);
+  timer = setTimeout(refreshAll, anyLive ? 60e3 : 10*60e3);
+}
+
+$('#today').textContent = new Date().toLocaleDateString([], { weekday:'long', month:'long', day:'numeric' });
+document.querySelectorAll('.tab').forEach(b => b.addEventListener('click', () => { tab = b.dataset.tab; localStorage.setItem(TAB_KEY, tab); render(); }));
+$('#refresh').addEventListener('click', refreshAll);
+document.addEventListener('visibilitychange', () => { if(document.visibilityState === 'visible') refreshAll(); });
+
+const cachedAt = loadCache();
+if(cachedAt){ render(); $('#updated').textContent = `Showing ${timeLabel(new Date(cachedAt))} data, updating…`; }
+else render();
+refreshAll();
+</script>
+</body>
+</html>
