@@ -67,6 +67,7 @@ a{color:inherit}
 .card{position:relative;background:var(--card);border-radius:14px;padding:12px 14px 12px 18px;overflow:hidden}
 .card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:6px;background:var(--tc,#888)}
 .card.off{opacity:.55;filter:grayscale(1)}
+.card.off.pre::after{content:"Preseason"}
 .card.off::after{content:"Offseason";position:absolute;right:12px;top:12px;font-size:11px;font-weight:600;color:var(--muted);
   background:var(--chip);padding:2px 7px;border-radius:6px}
 .head{display:grid;grid-template-columns:38px 1fr auto;gap:10px;align-items:center}
@@ -358,6 +359,7 @@ async function loadTeam(cfg){
     }
     m.nextDate = d;
     m.seasonNextDate = nextReal ? new Date(nextReal.date) : null;
+    m.preseason = isPre(nxt);
     m.slate = { date:d, tbd, live:isLive(nxt), logo:m.logo, what:`${cfg.abbr} ${oppLabel(me, opp)}`, tv };
   } else {
     m.rows.push({ k:'Next', v:'Schedule not posted', d:'' });
@@ -555,7 +557,10 @@ function finish(cfg, m){
   m.inSeason = !!(m.live
     || ((m.seasonNextDate !== undefined ? m.seasonNextDate : m.nextDate) && +new Date(m.seasonNextDate !== undefined ? m.seasonNextDate : m.nextDate) - now < win*DAY)
     || (m.lastDate && now - +new Date(m.lastDate) < LAST_WINDOW*DAY));
-  m.sortKey = m.live ? 0 : m.inSeason ? (m.nextDate ? +new Date(m.nextDate) : now + 60*DAY) : Infinity;
+  m.sortKey = m.live ? 0
+    : m.inSeason ? (m.nextDate ? +new Date(m.nextDate) : now + 60*DAY)
+    : m.preseason ? 1e14 + +new Date(m.nextDate)   // top of the greyed-out group
+    : Infinity;
   m.group = cfg.group; m.key = keyOf(cfg); m.order = TEAMS.indexOf(cfg);
   return m;
 }
@@ -578,7 +583,7 @@ function cardHTML(m){
       <span class="v ${r.live ? 'live' : ''}">${r.live ? '<span class="dot" aria-hidden="true"></span>' : ''}${r.res ? `<span class="res ${r.res}">${r.res}</span>` : ''}${r.v}${r.note ? `<span class="note">${esc(r.note)}</span>` : ''}${r.lines ? `<ol class="lb">${r.lines.map(l => `<li><span>${esc(l.n)}</span><b>${esc(l.s)}</b></li>`).join('')}</ol>` : ''}</span>
       <span class="d">${r.d || ''}${r.dsub ? `<small>${esc(r.dsub)}</small>` : ''}</span></div>`).join('');
   const form = m.form?.length && m.inSeason ? `<div class="form" aria-label="Last ${m.form.length} results"><em>Form</em>${m.form.map(f => `<span class="${f}" title="${f}"></span>`).join('')}</div>` : '';
-  return `<article class="card ${m.inSeason ? '' : 'off'}" style="--tc:${esc(m.color)}">
+  return `<article class="card ${m.inSeason ? '' : 'off'} ${!m.inSeason && m.preseason ? 'pre' : ''}" style="--tc:${esc(m.color)}">
     <div class="head">${badge(m)}
       <div><div class="name">${m.link ? `<a href="${esc(m.link)}" target="_blank" rel="noopener">${esc(m.name)}</a>` : esc(m.name)}</div>
         ${m.chips.length ? `<div class="chips">${m.chips.map(c => `<span class="chip ${c.cls||''}">${esc(c.t)}</span>`).join('')}</div>` : ''}</div>
