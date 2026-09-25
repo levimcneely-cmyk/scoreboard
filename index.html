@@ -152,6 +152,9 @@ const TEAMS = [
   { group:'family', kind:'team', sport:'football',   league:'college-football',        id:84,   label:'IU Football', abbr:'IUFB' },
   { group:'family', kind:'team', sport:'basketball', league:'mens-college-basketball', id:84,   label:'IU Basketball', abbr:'IUBB' },
   { group:'family', kind:'team', sport:'football',   league:'nfl',                     id:11,   label:'Colts', abbr:'INDC' },
+  { group:'family', kind:'team', sport:'baseball',   league:'mlb',                     id:8,    label:'Brewers', abbr:'BREW' },
+  { group:'family', kind:'team', sport:'baseball',   league:'mlb',                     id:17,   label:'Reds', abbr:'REDS' },
+  { group:'family', kind:'team', sport:'baseball',   league:'mlb',                     id:14,   label:'Blue Jays', abbr:'JAYS' },
   { group:'family', kind:'golf',    label:'PGA Tour', abbr:'PGA', mono:'PGA', color:'#0B3D6E' }
 ];
 
@@ -228,6 +231,35 @@ function tvOf(comp){
   return b?.media?.shortName || b?.names?.[0] || comp?.geoBroadcasts?.[0]?.media?.shortName || '';
 }
 
+// MLB: one standings fetch shared by every MLB card, ranked league-wide and overall
+let mlbStandingsP = null;
+function mlbStandings(){
+  if(mlbStandingsP) return mlbStandingsP;
+  mlbStandingsP = getJSON(`${ESPN_V2}/baseball/mlb/standings`).then(j => {
+    const rows = [];
+    const stat = (e, n) => e.stats?.find(s => s.name === n)?.value;
+    const collect = (node, lg) => {
+      if(!node || typeof node !== 'object') return;
+      if(Array.isArray(node)) return node.forEach(n => collect(n, lg));
+      const here = /american|national/i.test(node.name || '') ? (node.abbreviation || (/american/i.test(node.name) ? 'AL' : 'NL')) : lg;
+      if(node.team && Array.isArray(node.stats)){
+        const w = stat(node,'wins') ?? 0, l = stat(node,'losses') ?? 0;
+        rows.push({ id:String(node.team.id), lg:here, pct: stat(node,'winPercent') ?? (w+l ? w/(w+l) : 0), seed: stat(node,'playoffSeed') });
+        return;
+      }
+      Object.values(node).forEach(v => collect(v, here));
+    };
+    collect(j, null);
+    const seen = new Set(); const uniq = rows.filter(r => !seen.has(r.id) && seen.add(r.id));
+    const rankIn = list => { const s = [...list].sort((a,b) => b.pct - a.pct); const out = {}; s.forEach((r,i) => out[r.id] = i+1); return out; };
+    const overall = rankIn(uniq);
+    const byLg = {}; ['AL','NL'].forEach(lg => Object.assign(byLg, rankIn(uniq.filter(r => r.lg === lg))));
+    const info = {}; uniq.forEach(r => info[r.id] = { overall: overall[r.id], league: byLg[r.id], lg: r.lg, seed: r.seed });
+    return info;
+  }).catch(() => { mlbStandingsP = null; return {}; });
+  return mlbStandingsP;
+}
+
 async function loadTeam(cfg){
   const leagues = cfg.leagues || [cfg.league];
   let tj = null, league = null;
@@ -272,6 +304,12 @@ async function loadTeam(cfg){
   if(conf?.summary) chips.push({ t:`${conf.summary} conf` });
   const gb = stat(total, 'gamesBehind');
   if(cfg.league === 'mlb' && gb != null && gb > 0) chips.push({ t:`${gb} GB` });
+  if(cfg.league === 'mlb'){
+    const s = (await mlbStandings())[String(cfg.id)];
+    if(s?.league && s.lg) chips.push({ t:`${ordinal(s.league)} in ${s.lg}` });
+    if(s?.overall) chips.push({ t:`${ordinal(s.overall)} in MLB` });
+    if(s?.seed > 0 && s.seed <= 6) chips.push({ t:`${s.lg || ''} ${s.seed} seed`.trim(), cls:'rank' });
+  }
 
   let big = total?.summary || '', bigSub = '';
   if(soccer){
