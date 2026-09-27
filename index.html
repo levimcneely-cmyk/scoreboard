@@ -262,6 +262,17 @@ function mlbStandings(){
   return mlbStandingsP;
 }
 
+// League scoreboards are ESPN's real-time feed. The team and schedule endpoints
+// are cached for a long time, which made live games show up late with 0-0 scores.
+const SB_GROUPS = { 'college-football':'&groups=80', 'mens-college-basketball':'&groups=50' };
+let sbCache = new Map();
+function leagueScoreboard(sport, league){
+  const k = `${sport}/${league}`;
+  if(!sbCache.has(k)) sbCache.set(k, soft(getJSON(`${ESPN}/${sport}/${league}/scoreboard?limit=300${SB_GROUPS[league] || ''}&_=${Date.now()}`)));
+  return sbCache.get(k);
+}
+const hasTeam = (e, id) => (e?.competitions?.[0]?.competitors || []).some(c => String(c.team?.id ?? c.id) === String(id));
+
 async function loadTeam(cfg){
   const leagues = cfg.leagues || [cfg.league];
   let tj = null, league = null;
@@ -285,15 +296,23 @@ async function loadTeam(cfg){
     const prev = await soft(getJSON(`${base}?season=${sched.season.year - 1}`));
     done = (prev?.events || []).filter(isFinal);
   }
+  // Merge in today's real-time scoreboard for this team
+  const sb = await leagueScoreboard(cfg.sport, league);
+  const today = (sb?.events || []).filter(e => hasTeam(e, cfg.id));
+  const liveNow = today.find(isLive);
+  today.filter(isFinal).forEach(f => { done = done.filter(d => d.id !== f.id); done.push(f); });
   done.sort((a,b) => new Date(a.date) - new Date(b.date));
   const last = done.at(-1);
+  const doneIds = new Set(done.map(e => e.id));
+  const fresh = new Map(today.map(e => [e.id, e]));
 
   const seen = new Set();
-  const upcoming = [...(t.nextEvent || []), ...events.filter(e => !isFinal(e))]
-    .filter(e => e && !seen.has(e.id) && seen.add(e.id))
+  const upcoming = [...today.filter(e => !isFinal(e)), ...(t.nextEvent || []), ...events.filter(e => !isFinal(e))]
+    .map(e => fresh.get(e?.id) || e)              // prefer the real-time copy of any game
+    .filter(e => e && !doneIds.has(e.id) && !seen.has(e.id) && seen.add(e.id))
     .filter(e => isLive(e) || new Date(e.date) > Date.now() - 4*3600e3)
     .sort((a,b) => new Date(a.date) - new Date(b.date));
-  const nxt = upcoming.find(isLive) || upcoming[0];
+  const nxt = liveNow || upcoming.find(isLive) || upcoming[0];
   const nextReal = upcoming.find(e => !isPre(e));   // preseason games don't make a team "in season"
 
   // standings + record
@@ -619,6 +638,7 @@ function loadCache(){ try{ const c = JSON.parse(localStorage.getItem(CACHE_KEY))
 let timer = null;
 async function refreshAll(){
   const btn = $('#refresh'); btn.disabled = true; btn.textContent = 'Updating…';
+  sbCache = new Map();
   await Promise.all(TEAMS.map(async cfg => {
     try{ state[keyOf(cfg)] = finish(cfg, await LOADERS[cfg.kind](cfg)); }
     catch(e){
@@ -631,8 +651,13 @@ async function refreshAll(){
   $('#updated').textContent = `Updated ${timeLabel(new Date())}`;
   btn.disabled = false; btn.textContent = 'Refresh';
   clearTimeout(timer);
-  const anyLive = Object.values(state).some(m => m.live);
-  timer = setTimeout(refreshAll, anyLive ? 60e3 : 10*60e3);
+  // 30s while anything is live or about to start; otherwise wake up right at the next start time
+  const now = Date.now();
+  const starts = Object.values(state).map(m => m.nextDate ? +new Date(m.nextDate) : null).filter(Boolean);
+  const hot = Object.values(state).some(m => m.live) || starts.some(s => s - now < 10*60e3 && now - s < 4*3600e3);
+  const untilNext = Math.min(...starts.filter(s => s > now).map(s => s - now), Infinity);
+  const delay = hot ? 30e3 : Math.max(15e3, Math.min(10*60e3, untilNext + 5e3));
+  timer = setTimeout(refreshAll, delay);
 }
 
 $('#today').textContent = new Date().toLocaleDateString([], { weekday:'long', month:'long', day:'numeric' });
