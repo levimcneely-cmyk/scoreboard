@@ -58,7 +58,7 @@ a{color:inherit}
 /* Tabs */
 .tabs{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;display:grid;grid-template-columns:1fr 1fr;gap:4px;
   background:var(--bg);padding:6px 0 10px}
-.tabs-inner{display:grid;grid-template-columns:1fr 1fr;background:var(--chip);border-radius:11px;padding:3px;grid-column:1/-1}
+.tabs-inner{display:grid;grid-template-columns:1fr 1fr 1fr;background:var(--chip);border-radius:11px;padding:3px;grid-column:1/-1}
 .tab{border:0;background:transparent;border-radius:9px;padding:8px;font-weight:600;cursor:pointer;color:var(--muted)}
 .tab[aria-selected="true"]{background:var(--card);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.08)}
 
@@ -102,6 +102,42 @@ a{color:inherit}
 .lb li{counter-increment:lb;display:grid;grid-template-columns:22px 1fr auto;gap:6px;padding:1px 0}
 .lb li::before{content:counter(lb);color:var(--faint);font:600 14px/1.35 var(--cond)}
 .lb li b{font:600 15px/1.3 var(--cond)}
+.tab .cnt{display:inline-block;min-width:18px;margin-left:5px;padding:0 5px;border-radius:9px;background:var(--live);color:#fff;font:700 12px/18px var(--body)}
+/* Live now tab */
+.lv .lvtop{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:13px;color:var(--muted)}
+.lv .lvtop .live{font-size:13px}
+.lv .lvtop .soon{font-weight:700;color:var(--ink)}
+.lv .who{font-size:11px;color:var(--faint);font-weight:600}
+.sbx{margin-top:8px;display:grid;gap:4px}
+.sbx .t{display:grid;grid-template-columns:32px 1fr auto;gap:10px;align-items:center}
+.sbx .t img{width:32px;height:32px;object-fit:contain}
+.sbx .tn{font:600 20px/1 var(--cond)}
+.sbx .tn small{font:500 12px/1 var(--body);color:var(--muted);margin-left:6px}
+.sbx .sc{font:700 32px/1 var(--cond);min-width:40px;text-align:right}
+.sbx .t.mine .tn{font-weight:700}
+.sbx .t.trail .sc,.sbx .t.trail .tn{color:var(--muted)}
+.ls{margin-top:10px;overflow-x:auto}
+.ls table{border-collapse:collapse;font:500 14px/1 var(--cond);min-width:100%}
+.ls th,.ls td{padding:4px 5px;text-align:center;white-space:nowrap}
+.ls th{color:var(--faint);font-weight:600}
+.ls td:first-child,.ls th:first-child{text-align:left;padding-left:0}
+.ls .tot{font-weight:700;border-left:1px solid var(--line)}
+.sit{margin-top:10px;display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:center;padding-top:10px;border-top:1px solid var(--line);font-size:14px}
+.sit .count{font:600 16px/1.2 var(--cond)}
+.sit .outs span{display:inline-block;width:9px;height:9px;border-radius:50%;border:1.5px solid var(--muted);margin-right:3px}
+.sit .outs span.on{background:var(--ink);border-color:var(--ink)}
+.sit .muted{color:var(--muted);font-size:13px}
+.lastplay{margin-top:8px;font-size:13px;color:var(--muted)}
+.goals{margin-top:8px;font-size:14px;display:grid;gap:2px}
+.goals b{font:600 14px/1.3 var(--cond);color:var(--muted);display:inline-block;min-width:34px}
+.stx{margin-top:10px;padding-top:6px;border-top:1px solid var(--line)}
+.stx .r{display:grid;grid-template-columns:1fr auto 1fr;gap:8px;padding:4px 0;font-size:14px}
+.stx .r span:first-child{text-align:left;font:600 15px/1.2 var(--cond)}
+.stx .r span:last-child{text-align:right;font:600 15px/1.2 var(--cond)}
+.stx .r em{font-style:normal;color:var(--muted);font-size:12px;text-align:center}
+.lvlink{display:inline-block;margin-top:10px;font-size:13px;font-weight:600}
+.nolive{background:var(--card);border-radius:14px;padding:18px 16px;color:var(--muted)}
+.nolive b{display:block;color:var(--ink);font:700 20px/1.1 var(--cond);margin-bottom:4px}
 .err{color:var(--muted);font-size:13px;margin-top:8px}
 .skel{height:120px;background:var(--card);border-radius:14px;opacity:.6}
 .foot{margin-top:18px;text-align:center;font-size:12px;color:var(--faint)}
@@ -126,6 +162,7 @@ a{color:inherit}
     <div class="tabs-inner">
       <button class="tab" role="tab" data-tab="mine" aria-selected="true">My teams</button>
       <button class="tab" role="tab" data-tab="family" aria-selected="false">Family</button>
+      <button class="tab" role="tab" data-tab="live" aria-selected="false">Live now<span class="cnt" id="livecnt" hidden></span></button>
     </div>
   </nav>
 
@@ -273,6 +310,56 @@ function leagueScoreboard(sport, league){
 }
 const hasTeam = (e, id) => (e?.competitions?.[0]?.competitors || []).some(c => String(c.team?.id ?? c.id) === String(id));
 
+// ---------- Live now: detailed game card ----------
+const SOON = 10*60e3;
+const STAT_WANT = {
+  football:   [/total yards|totalYards/i, /^passing$|netPassingYards/i, /^rushing$|rushingYards/i, /turnovers/i, /3rd down|thirdDownEff/i, /possession/i],
+  basketball: [/field goal %|fieldGoalPct/i, /three point %|threePointFieldGoalPct/i, /rebounds|totalRebounds/i, /assists/i, /turnovers|totalTurnovers/i],
+  soccer:     [/possession/i, /^shots$|totalShots/i, /on target|on goal|shotsOnTarget/i, /corner/i, /fouls/i],
+  baseball:   []
+};
+function pickStats(sport, sum, awayId, homeId){
+  const teams = sum?.boxscore?.teams || [];
+  const flat = t => { const out = []; (t?.statistics || []).forEach(s => Array.isArray(s.stats)
+      ? s.stats.forEach(x => out.push({ k:`${x.label||''} ${x.name||''}`, label:x.label || x.displayName || x.name, v:x.displayValue }))
+      : out.push({ k:`${s.label||''} ${s.name||''}`, label:s.label || s.displayName || s.name, v:s.displayValue })); return out; };
+  const A = flat(teams.find(t => String(t.team?.id) === awayId)), H = flat(teams.find(t => String(t.team?.id) === homeId));
+  if(!A.length || !H.length) return [];
+  const want = STAT_WANT[sport] || [];
+  const rows = [];
+  want.forEach(re => { const i = A.findIndex(x => re.test(x.k.trim()) || re.test(x.label||'')); if(i >= 0){ const hh = H.find(x => x.k === A[i].k); if(hh) rows.push([A[i].v, A[i].label, hh.v]); } });
+  return rows;
+}
+async function buildLiveCard(cfg, league, ev, color){
+  const comp = ev.competitions?.[0] || {};
+  const cs = comp.competitors || [];
+  const away = cs.find(c => c.homeAway === 'away') || cs[0], home = cs.find(c => c.homeAway === 'home') || cs[1];
+  const side = c => ({ id:String(c?.team?.id ?? c?.id), abbr:c?.team?.abbreviation || '', name:c?.team?.shortDisplayName || c?.team?.displayName || '',
+    logo:c?.team?.logo || c?.team?.logos?.[0]?.href, score:scoreOf(c), rank:rankOf(c),
+    rec:c?.records?.[0]?.summary || '', lines:(c?.linescores || []).map(l => l.displayValue ?? l.value ?? ''),
+    hits:c?.hits, errors:c?.errors });
+  const live = isLive(ev);
+  const card = { kind:'game', sport:cfg.sport, periods: cfg.sport === 'baseball' ? 9 : league === 'mens-college-basketball' ? 2 : 4, abbr:cfg.abbr, color, mine:String(cfg.id), start:ev.date, live,
+    detail: stType(ev).shortDetail || stType(ev).detail || '', tv:tvOf(comp),
+    away:side(away), home:side(home), link: ev.links?.[0]?.href || '', plays:[], stats:[], sit:null };
+  const s = comp.situation;
+  if(s && live){
+    if(cfg.sport === 'baseball') card.sit = { kind:'bb', balls:s.balls, strikes:s.strikes, outs:s.outs, on:[!!s.onFirst, !!s.onSecond, !!s.onThird],
+      batter:s.batter?.athlete?.shortName || s.batter?.athlete?.displayName, pitcher:s.pitcher?.athlete?.shortName || s.pitcher?.athlete?.displayName, last:s.lastPlay?.text };
+    else card.sit = { kind:'gen', text:s.downDistanceText || s.shortDownDistanceText || '', poss:String(s.possession || ''), red:!!s.isRedZone, last:s.lastPlay?.text };
+  }
+  card.plays = (comp.details || []).filter(d => d.scoringPlay || /red card/i.test(d.type?.text || '')).map(d => ({
+    t:d.clock?.displayValue || '', who:d.athletesInvolved?.[0]?.shortName || d.athletesInvolved?.[0]?.displayName || '',
+    team:String(d.team?.id || ''), tag:/red card/i.test(d.type?.text || '') ? 'red card' : d.penaltyKick ? 'pen' : d.ownGoal ? 'OG' : '' }));
+  if(live){
+    const sum = await soft(getJSON(`${ESPN}/${cfg.sport}/${league}/summary?event=${ev.id}&_=${Date.now()}`));
+    card.stats = pickStats(cfg.sport, sum, card.away.id, card.home.id);
+    if(!card.sit && cfg.sport === 'baseball' && sum?.situation){ const x = sum.situation;
+      card.sit = { kind:'bb', balls:x.balls, strikes:x.strikes, outs:x.outs, on:[!!x.onFirst, !!x.onSecond, !!x.onThird], last:x.lastPlay?.text }; }
+  }
+  return card;
+}
+
 async function loadTeam(cfg){
   const leagues = cfg.leagues || [cfg.league];
   let tj = null, league = null;
@@ -380,6 +467,8 @@ async function loadTeam(cfg){
     m.seasonNextDate = nextReal ? new Date(nextReal.date) : null;
     m.preseason = isPre(nxt);
     m.slate = { date:d, tbd, live:isLive(nxt), logo:m.logo, what:`${cfg.abbr} ${oppLabel(me, opp)}`, tv };
+    if(!isFinal(nxt) && (isLive(nxt) || (!tbd && +d - Date.now() < SOON && Date.now() - +d < 4*3600e3)))
+      m.liveCard = await buildLiveCard(cfg, league, nxt, m.color);
   } else {
     m.rows.push({ k:'Next', v:'Schedule not posted', d:'' });
   }
@@ -429,6 +518,7 @@ async function loadF1(cfg){
       note: [nr.Circuit?.Location?.locality, nr.Sprint ? 'Sprint weekend' : ''].filter(Boolean).join(', '),
       d: dayLabel(d), dsub: nr.time ? timeLabel(d) : 'Time TBA' });
     m.nextDate = d;
+    m.nextName = nr.raceName; m.nextTimed = !!nr.time;
     m.slate = { date:d, tbd:!nr.time, mono:cfg.mono, color:cfg.color, what:`${cfg.abbr} ${nr.raceName.replace(' Grand Prix',' GP')}`, tv:'' };
   } else {
     m.rows.push({ k:'Next', v:'Season complete', d:'' });
@@ -500,6 +590,7 @@ async function loadIndyCar(cfg){
     const tv = rc ? tvOf(rc) : '';
     m.rows.push({ k:'Next', v: esc(nextCal.label), d: dayLabel(d), dsub: [rc?.date ? timeLabel(d) : 'Time TBA', tv].filter(Boolean).join(', ') });
     m.nextDate = d;
+    m.nextName = nextCal.label; m.nextTimed = !!rc?.date;
     m.slate = { date:d, tbd:!rc?.date, mono:cfg.mono, color:cfg.color, what:`${cfg.abbr} ${nextCal.label}`, tv };
   } else {
     m.rows.push({ k:'Next', v:'Season complete', note:'Schedule for next year not posted yet', d:'' });
@@ -514,47 +605,58 @@ function standingEntries(j){
     if(o.athlete && Array.isArray(o.stats)) out.push(o); else Object.values(o).forEach(walk); })(j);
   return out;
 }
+async function fedexTop5(){
+  // Source 1: ESPN's stats table (the one behind espn.com's FedExCup points page)
+  const j = await soft(getJSON('https://site.web.api.espn.com/apis/common/v3/sports/golf/pga/statistics/byathlete?region=us&lang=en&limit=300&sort=general.cupPoints:desc'));
+  if(j?.athletes?.length){
+    const cats = j.categories || [];
+    const rows = j.athletes.map(a => {
+      let pts = null;
+      (a.categories || []).forEach(c => {
+        const meta = cats.find(x => x.name === c.name) || c;
+        const i = (meta.names || []).indexOf('cupPoints');
+        if(i >= 0){ const v = Number(String(c.values?.[i] ?? c.totals?.[i] ?? '').replace(/,/g, '')); if(!isNaN(v)) pts = v; }
+      });
+      return { n:a.athlete?.displayName || '', pts };
+    }).filter(r => r.pts != null && r.n);
+    if(rows.length) return rows.sort((a,b) => b.pts - a.pts).slice(0,5);
+  }
+  // Source 2: ESPN standings feed
+  const s = await soft(getJSON(`${ESPN_V2}/golf/pga/standings`));
+  const sv = (e, names) => { const x = e.stats.find(s => names.includes(s.name) || names.includes(s.abbreviation)); return x ? (x.value ?? x.displayValue) : null; };
+  return standingEntries(s)
+    .map((e,i) => ({ n:athleteName(e), pos:Number(sv(e,['rank','position','RK']) ?? i+1), pts:sv(e,['cupPoints','points','fedexPoints','PTS']) }))
+    .sort((a,b) => a.pos - b.pos).slice(0,5);
+}
 async function loadGolf(cfg){
-  const sb = await getJSON(`${ESPN}/golf/pga/scoreboard`);
+  const sb = await getJSON(`${ESPN}/golf/pga/scoreboard?_=${Date.now()}`);
   const cal = calendarOf(sb);
   const now = Date.now();
   const m = { name:cfg.label, mono:cfg.mono, color:cfg.color, link:'https://www.espn.com/golf/leaderboard', chips:[], rows:[], big:'', bigSub:'' };
   const ev = sb.events?.[0];
   const board = e => [...(e?.competitions?.[0]?.competitors || [])].sort((a,b) => (a.order ?? a.sortOrder ?? 999) - (b.order ?? b.sortOrder ?? 999));
   const scoreStr = c => typeof c.score === 'object' ? (c.score?.displayValue ?? '') : (c.score ?? '');
-  const top5 = e => board(e).slice(0,5).map(c => ({ n:athleteName(c), s:scoreStr(c) }));
+  const topN = (e, n) => board(e).slice(0,n).map(c => ({ n:athleteName(c), s:scoreStr(c), thru: c.status?.thru ?? c.status?.displayValue ?? '' }));
 
-  // Live tournament leaderboard
   if(ev && isLive(ev)){
     m.live = true;
-    m.rows.push({ k:'Now', live:true, v: esc(ev.name), lines: top5(ev), d: esc(stType(ev).shortDetail || 'Live'), dsub: tvOf(ev.competitions?.[0]) });
+    m.rows.push({ k:'Now', live:true, v: esc(ev.name), lines: topN(ev,5), d: esc(stType(ev).shortDetail || 'Live'), dsub: tvOf(ev.competitions?.[0]) });
     m.nextDate = new Date();
     m.slate = { date:new Date(), live:true, mono:cfg.mono, color:cfg.color, what:`${cfg.abbr} ${ev.name}`, tv: tvOf(ev.competitions?.[0]) };
+    m.liveCard = { kind:'golf', abbr:cfg.abbr, color:cfg.color, live:true, name:ev.name, detail: stType(ev).shortDetail || stType(ev).detail || '',
+      tv: tvOf(ev.competitions?.[0]), top: topN(ev,10), link:'https://www.espn.com/golf/leaderboard' };
   }
 
-  // Season standings (FedExCup) top 5
-  const stJ = await soft(getJSON(`${ESPN_V2}/golf/pga/standings`));
-  const sv = (e, names) => { const s = e.stats.find(s => names.includes(s.name) || names.includes(s.abbreviation)); return s ? (s.displayValue ?? s.value) : null; };
-  const season = standingEntries(stJ)
-    .map((e,i) => ({ n:athleteName(e), pos:Number(sv(e,['rank','position','RK']) ?? i+1), pts:sv(e,['points','cupPoints','fedexPoints','PTS']) }))
-    .sort((a,b) => a.pos - b.pos).slice(0,5);
-  if(season.length) m.rows.push({ k:'Season', v:'FedExCup standings', lines: season.map(x => ({ n:x.n, s: x.pts ? `${x.pts} pts` : '' })), d:'' });
+  // FedExCup standings (season championship)
+  const fx = await fedexTop5();
+  m.rows.push(fx.length
+    ? { k:'Cup', v:'FedExCup standings', lines: fx.map(x => ({ n:x.n, s: x.pts != null ? `${Number(x.pts).toLocaleString()} pts` : '' })), d:'' }
+    : { k:'Cup', v:'FedExCup standings', note:'Unavailable right now', d:'' });
 
-  // Last completed tournament top 5
-  let last = null;
-  if(ev && isFinal(ev)) last = ev;
-  else {
-    const lc = [...cal].reverse().find(c => c.end < now);
-    if(lc) last = await eventOn('golf','pga', lc.end, lc.label);
-    if(last && !isFinal(last)) last = null;
-  }
-  if(last){
-    const d = new Date(last.endDate || last.date);
-    m.rows.push({ k:'Last', v: esc(last.name), lines: top5(last), d: dayLabel(d) });
-    m.lastDate = d;
-  }
+  // for in/out of season only
+  const lc = [...cal].reverse().find(c => c.end < now);
+  if(lc) m.lastDate = lc.end;
 
-  // Next tournament
   if(!m.live){
     const nc = (ev && !isFinal(ev)) ? { label:ev.name, start:new Date(ev.date), end:new Date(ev.endDate || +new Date(ev.date)+3*DAY) } : cal.find(c => c.start > now);
     if(nc){
@@ -581,6 +683,12 @@ function finish(cfg, m){
     : m.preseason ? 1e14 + +new Date(m.nextDate)   // top of the greyed-out group
     : Infinity;
   m.group = cfg.group; m.key = keyOf(cfg); m.order = TEAMS.indexOf(cfg);
+  if((cfg.kind === 'f1' || cfg.kind === 'indycar') && m.nextDate && m.nextTimed){
+    const dt = +new Date(m.nextDate) - now;
+    if(dt < SOON && dt > -150*60e3) m.liveCard = { kind:'race', abbr:cfg.abbr, color:cfg.color, name:m.nextName, start:m.nextDate, live: dt <= 0,
+      link: cfg.kind === 'f1' ? 'https://www.formula1.com/en/timing/f1-live' : 'https://www.indycar.com/Timing-and-Scoring' };
+  }
+  if(m.liveCard){ m.liveCard.group = cfg.group; m.liveCard.order = m.order; }
   return m;
 }
 
@@ -610,13 +718,84 @@ function cardHTML(m){
     </div>
     <div class="rows">${rows}</div>${form}</article>`;
 }
+function minsUntil(d){ const x = Math.round((+new Date(d) - Date.now()) / 60e3); return x <= 0 ? 'Starting now' : `Starts in ${x} min`; }
+function liveTop(c){
+  return `<div class="lvtop"><span>${c.live ? '<span class="live"><span class="dot" aria-hidden="true"></span>Live</span>' : `<span class="soon">${esc(minsUntil(c.start))}</span>`}
+    <span class="who">${esc(c.abbr)}${c.group === 'family' ? ', family' : ''}</span></span>
+    <span>${esc(c.live ? c.detail : timeLabel(new Date(c.start)))}${c.tv ? `, ${esc(c.tv)}` : ''}</span></div>`;
+}
+function diamond(on){
+  const b = (x,y,f) => `<rect x="${x}" y="${y}" width="11" height="11" transform="rotate(45 ${x+5.5} ${y+5.5})" fill="${f ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="1.5"/>`;
+  return `<svg width="46" height="34" viewBox="0 0 46 34" aria-label="Runners on base" role="img">${b(28,13,on[0])}${b(17.5,3,on[1])}${b(7,13,on[2])}</svg>`;
+}
+function liveCardHTML(c){
+  if(c.kind === 'golf') return `<article class="card lv" style="--tc:${esc(c.color)}">${liveTop(c)}
+    <div class="name" style="margin-top:6px">${esc(c.name)}</div>
+    <ol class="lb">${c.top.map(l => `<li><span>${esc(l.n)}${l.thru !== '' ? ` <small style="color:var(--faint)">thru ${esc(l.thru)}</small>` : ''}</span><b>${esc(l.s)}</b></li>`).join('')}</ol>
+    <a class="lvlink" href="${esc(c.link)}" target="_blank" rel="noopener">Full leaderboard</a></article>`;
+  if(c.kind === 'race') return `<article class="card lv" style="--tc:${esc(c.color)}">${liveTop({ ...c, detail:'Race underway' })}
+    <div class="name" style="margin-top:6px">${esc(c.name)}</div>
+    <a class="lvlink" href="${esc(c.link)}" target="_blank" rel="noopener">Live timing</a></article>`;
+
+  const sa = parseFloat(c.away.score), sh = parseFloat(c.home.score);
+  const row = (t, other) => `<div class="t ${t.id === c.mine ? 'mine' : ''} ${c.live && !isNaN(sa) && !isNaN(sh) && parseFloat(t.score) < parseFloat(other.score) ? 'trail' : ''}">
+      ${t.logo ? `<img src="${esc(t.logo)}" alt="">` : '<span></span>'}
+      <span class="tn">${t.rank ? `<small style="margin:0 4px 0 0">#${t.rank}</small>` : ''}${esc(t.name)}${t.rec ? `<small>${esc(t.rec)}</small>` : ''}</span>
+      <span class="sc">${c.live ? esc(t.score ?? 0) : ''}</span></div>`;
+  let html = `<article class="card lv" style="--tc:${esc(c.color)}">${liveTop(c)}<div class="sbx">${row(c.away, c.home)}${row(c.home, c.away)}</div>`;
+
+  // line score
+  const n = Math.max(c.away.lines.length, c.home.lines.length);
+  if(c.live && n >= 1 && c.sport !== 'soccer'){
+    const bb = c.sport === 'baseball';
+    const cols = bb ? Math.max(n, 9) : n;
+    const tr = t => `<tr><td>${esc(t.abbr)}</td>${Array.from({ length:cols }, (_,i) => `<td>${esc(t.lines[i] ?? '')}</td>`).join('')}
+      <td class="tot">${esc(t.score ?? '')}</td>${bb ? `<td>${esc(t.hits ?? '')}</td><td>${esc(t.errors ?? '')}</td>` : ''}</tr>`;
+    html += `<div class="ls"><table><tr><th></th>${Array.from({ length:cols }, (_,i) => `<th>${bb || i < (c.periods || 4) ? i+1 : 'OT'}</th>`).join('')}
+      <th class="tot">${bb ? 'R' : 'T'}</th>${bb ? '<th>H</th><th>E</th>' : ''}</tr>${tr(c.away)}${tr(c.home)}</table></div>`;
+  }
+  // situation
+  if(c.sit?.kind === 'bb'){
+    html += `<div class="sit">${diamond(c.sit.on)}<div>
+      <div class="count">${esc(c.sit.balls ?? 0)}-${esc(c.sit.strikes ?? 0)} <span class="outs" aria-label="${esc(c.sit.outs ?? 0)} outs">${[0,1,2].map(i => `<span class="${i < (c.sit.outs || 0) ? 'on' : ''}"></span>`).join('')}</span></div>
+      ${c.sit.batter || c.sit.pitcher ? `<div class="muted">${c.sit.batter ? `AB: ${esc(c.sit.batter)}` : ''}${c.sit.batter && c.sit.pitcher ? '<br>' : ''}${c.sit.pitcher ? `P: ${esc(c.sit.pitcher)}` : ''}</div>` : ''}</div></div>`;
+  } else if(c.sit?.kind === 'gen' && c.sit.text){
+    const poss = [c.away, c.home].find(t => t.id === c.sit.poss);
+    html += `<div class="sit"><div class="count">${esc(c.sit.text)}</div><div class="muted">${poss ? `${esc(poss.abbr)} ball` : ''}${c.sit.red ? ', red zone' : ''}</div></div>`;
+  }
+  if(c.sit?.last) html += `<div class="lastplay">${esc(c.sit.last)}</div>`;
+  // soccer goals / reds
+  if(c.plays.length && c.sport === 'soccer'){
+    const ab = id => [c.away, c.home].find(t => t.id === id)?.abbr || '';
+    html += `<div class="goals">${c.plays.map(p => `<div><b>${esc(p.t)}</b>${esc(p.who)} <span style="color:var(--muted)">${esc(ab(p.team))}${p.tag ? `, ${esc(p.tag)}` : ''}</span></div>`).join('')}</div>`;
+  }
+  // team stats
+  if(c.stats.length){
+    html += `<div class="stx"><div class="r"><span style="font:600 12px var(--body);color:var(--faint)">${esc(c.away.abbr)}</span><em></em><span style="font:600 12px var(--body);color:var(--faint)">${esc(c.home.abbr)}</span></div>
+      ${c.stats.map(s => `<div class="r"><span>${esc(s[0])}</span><em>${esc(s[1])}</em><span>${esc(s[2])}</span></div>`).join('')}</div>`;
+  }
+  if(c.link) html += `<a class="lvlink" href="${esc(c.link)}" target="_blank" rel="noopener">Full game on ESPN</a>`;
+  return html + '</article>';
+}
+function renderLive(){
+  const cards = Object.values(state).map(m => m.liveCard).filter(Boolean)
+    .sort((a,b) => (b.live - a.live) || (+new Date(a.start || 0) - +new Date(b.start || 0)) || (a.order - b.order));
+  if(cards.length) return cards.map(liveCardHTML).join('');
+  const nextUp = Object.values(state).filter(m => m.slate && !m.slate.tbd && +new Date(m.slate.date) > Date.now())
+    .sort((a,b) => new Date(a.slate.date) - new Date(b.slate.date))[0];
+  return `<div class="nolive"><b>Nothing live right now</b>${nextUp ? `Next up: ${esc(nextUp.slate.what)}, ${esc(dayLabel(new Date(nextUp.slate.date)))} at ${esc(timeLabel(new Date(nextUp.slate.date)))}` : 'Games show up here 10 minutes before they start.'}</div>`;
+}
+
 function render(){
+  const liveCount = Object.values(state).filter(m => m.liveCard).length;
+  const cnt = $('#livecnt'); cnt.hidden = !liveCount; cnt.textContent = liveCount;
   document.querySelectorAll('.tab').forEach(b => b.setAttribute('aria-selected', b.dataset.tab === tab));
   const cfgs = TEAMS.filter(c => c.group === tab);
   const models = cfgs.map(c => state[keyOf(c)]).filter(Boolean)
     .sort((a,b) => (a.sortKey - b.sortKey) || (a.order - b.order));
   const pending = cfgs.length - models.length;
-  $('#list').innerHTML = models.map(cardHTML).join('') + '<div class="skel"></div>'.repeat(Math.max(0, pending));
+  $('#list').innerHTML = tab === 'live' ? renderLive()
+    : models.map(cardHTML).join('') + '<div class="skel"></div>'.repeat(Math.max(0, pending));
 
   // Slate: everything tracked, next 7 days
   const horizon = Date.now() + 7*DAY;
@@ -633,7 +812,9 @@ function render(){
 
 /* ---------- load / cache ---------- */
 function saveCache(){ try{ localStorage.setItem(CACHE_KEY, JSON.stringify({ at:Date.now(), state })); }catch(e){} }
-function loadCache(){ try{ const c = JSON.parse(localStorage.getItem(CACHE_KEY)); if(c?.state){ state = c.state; return c.at; } }catch(e){} return null; }
+function loadCache(){ try{ const c = JSON.parse(localStorage.getItem(CACHE_KEY)); if(c?.state){ state = c.state;
+  if(Date.now() - c.at > 2*60e3) Object.values(state).forEach(m => { delete m.liveCard; });   // old live data is misleading
+  return c.at; } }catch(e){} return null; }
 
 let timer = null;
 async function refreshAll(){
@@ -655,7 +836,7 @@ async function refreshAll(){
   const now = Date.now();
   const starts = Object.values(state).map(m => m.nextDate ? +new Date(m.nextDate) : null).filter(Boolean);
   const hot = Object.values(state).some(m => m.live) || starts.some(s => s - now < 10*60e3 && now - s < 4*3600e3);
-  const untilNext = Math.min(...starts.filter(s => s > now).map(s => s - now), Infinity);
+  const untilNext = Math.min(...starts.filter(s => s - SOON > now).map(s => s - SOON - now), Infinity);
   const delay = hot ? 30e3 : Math.max(15e3, Math.min(10*60e3, untilNext + 5e3));
   timer = setTimeout(refreshAll, delay);
 }
