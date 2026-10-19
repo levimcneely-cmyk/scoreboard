@@ -205,7 +205,7 @@ const LAST_WINDOW = 10;
 const ESPN = 'https://site.api.espn.com/apis/site/v2/sports';
 const ESPN_V2 = 'https://site.api.espn.com/apis/v2/sports';
 const JOLPICA = 'https://api.jolpi.ca/ergast/f1';
-const CACHE_KEY = 'scoreboard-cache-v1';
+const CACHE_KEY = 'scoreboard-cache-v2';
 const TAB_KEY = 'scoreboard-tab';
 const DAY = 864e5;
 
@@ -213,13 +213,23 @@ const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const keyOf = c => `${c.kind}-${c.league||c.leagues?.[0]||''}-${c.id||c.label}`;
 
-async function getJSON(url, ms = 12000){
+async function fetchOnce(url, ms){
   const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), ms);
   try{
-    const r = await fetch(url, { signal: ctl.signal });
+    const r = await fetch(url, { signal: ctl.signal, cache: 'no-store' });
     if(!r.ok) throw new Error(`HTTP ${r.status}`);
     return await r.json();
   } finally { clearTimeout(t); }
+}
+// ESPN sometimes refuses one host and serves the other, so try both
+async function getJSON(url, ms = 12000){
+  const urls = [url];
+  if(url.includes('://site.api.espn.com')) urls.push(url.replace('://site.api.espn.com', '://site.web.api.espn.com'));
+  let err;
+  for(const u of urls){
+    try{ return await fetchOnce(u, ms); }catch(e){ err = e; }
+  }
+  throw err;
 }
 const soft = p => p.catch(() => null);
 
@@ -233,6 +243,7 @@ function dayLabel(d){
   if(diff > 1 && diff < 7) return d.toLocaleDateString([], { weekday:'long' });
   return d.toLocaleDateString([], { weekday:'short', month:'short', day:'numeric' });
 }
+const isoOf = d => new Date(d).toISOString();
 const timeLabel = d => d.toLocaleTimeString([], { hour:'numeric', minute:'2-digit' });
 const ymd = d => { const x = new Date(d); return `${x.getFullYear()}${String(x.getMonth()+1).padStart(2,'0')}${String(x.getDate()).padStart(2,'0')}`; };
 const ordinal = n => { n = Number(n); const s=['th','st','nd','rd'], v=n%100; return n + (s[(v-20)%10]||s[v]||s[0]); };
@@ -305,7 +316,7 @@ const SB_GROUPS = { 'college-football':'&groups=80', 'mens-college-basketball':'
 let sbCache = new Map();
 function leagueScoreboard(sport, league){
   const k = `${sport}/${league}`;
-  if(!sbCache.has(k)) sbCache.set(k, soft(getJSON(`${ESPN}/${sport}/${league}/scoreboard?limit=300${SB_GROUPS[league] || ''}&_=${Date.now()}`)));
+  if(!sbCache.has(k)) sbCache.set(k, soft(getJSON(`${ESPN}/${sport}/${league}/scoreboard?limit=300${SB_GROUPS[league] || ''}`)));
   return sbCache.get(k);
 }
 const hasTeam = (e, id) => (e?.competitions?.[0]?.competitors || []).some(c => String(c.team?.id ?? c.id) === String(id));
@@ -352,7 +363,7 @@ async function buildLiveCard(cfg, league, ev, color){
     t:d.clock?.displayValue || '', who:d.athletesInvolved?.[0]?.shortName || d.athletesInvolved?.[0]?.displayName || '',
     team:String(d.team?.id || ''), tag:/red card/i.test(d.type?.text || '') ? 'red card' : d.penaltyKick ? 'pen' : d.ownGoal ? 'OG' : '' }));
   if(live){
-    const sum = await soft(getJSON(`${ESPN}/${cfg.sport}/${league}/summary?event=${ev.id}&_=${Date.now()}`));
+    const sum = await soft(getJSON(`${ESPN}/${cfg.sport}/${league}/summary?event=${ev.id}`));
     card.stats = pickStats(cfg.sport, sum, card.away.id, card.home.id);
     if(!card.sit && cfg.sport === 'baseball' && sum?.situation){ const x = sum.situation;
       card.sit = { kind:'bb', balls:x.balls, strikes:x.strikes, outs:x.outs, on:[!!x.onFirst, !!x.onSecond, !!x.onThird], last:x.lastPlay?.text }; }
@@ -439,7 +450,7 @@ async function loadTeam(cfg){
     m.rows.push({ k:'Last', res:L,
       v:`${esc(scoreOf(me))}–${esc(scoreOf(opp))} ${esc(oppLabel(me, opp))}`,
       note: old ? 'Last season' : (last.competitions?.[0]?.notes?.[0]?.headline || ''),
-      d: dayLabel(d), dsub: d.getFullYear() !== new Date().getFullYear() ? String(d.getFullYear()) : '' });
+      dd: isoOf(d), dsub: d.getFullYear() !== new Date().getFullYear() ? String(d.getFullYear()) : '' });
     m.lastDate = d;
     m.form = done.slice(-5).map(e => { const s = sides(e, cfg.id); return resultLetter(s.me, s.opp, soccer); }).filter(Boolean);
   } else {
@@ -461,14 +472,14 @@ async function loadTeam(cfg){
     } else {
       m.rows.push({ k:'Next', v: esc(oppLabel(me, opp)),
         note: [pre, cup].filter(Boolean).join(', '),
-        d: dayLabel(d), dsub: [tbd ? 'Time TBA' : timeLabel(d), tv].filter(Boolean).join(', ') });
+        dd: isoOf(d), dsub: [tbd ? 'Time TBA' : timeLabel(d), tv].filter(Boolean).join(', ') });
     }
     m.nextDate = d;
     m.seasonNextDate = nextReal ? new Date(nextReal.date) : null;
     m.preseason = isPre(nxt);
     m.slate = { date:d, tbd, live:isLive(nxt), logo:m.logo, what:`${cfg.abbr} ${oppLabel(me, opp)}`, tv };
     if(!isFinal(nxt) && (isLive(nxt) || (!tbd && +d - Date.now() < SOON && Date.now() - +d < 4*3600e3)))
-      m.liveCard = await buildLiveCard(cfg, league, nxt, m.color);
+      m.liveCard = await buildLiveCard(cfg, league, nxt, m.color).catch(() => null);
   } else {
     m.rows.push({ k:'Next', v:'Schedule not posted', d:'' });
   }
@@ -508,7 +519,7 @@ async function loadF1(cfg){
     const win = res[0];
     const weWon = win?.Constructor?.constructorId === cid;
     m.rows.push({ k:'Last', res: weWon ? 'W' : '', v: esc(race.raceName.replace(' Grand Prix',' GP')),
-      note: `${ours}${win && !weWon ? `. Won by ${win.Driver.familyName}` : ''}`, d: dayLabel(d) });
+      note: `${ours}${win && !weWon ? `. Won by ${win.Driver.familyName}` : ''}`, dd: isoOf(d) });
     m.lastDate = d;
   }
   const nr = nextJ?.MRData?.RaceTable?.Races?.[0];
@@ -516,7 +527,7 @@ async function loadF1(cfg){
     const d = new Date(`${nr.date}T${nr.time || '12:00:00Z'}`);
     m.rows.push({ k:'Next', v: esc(nr.raceName.replace(' Grand Prix',' GP')),
       note: [nr.Circuit?.Location?.locality, nr.Sprint ? 'Sprint weekend' : ''].filter(Boolean).join(', '),
-      d: dayLabel(d), dsub: nr.time ? timeLabel(d) : 'Time TBA' });
+      dd: isoOf(d), dsub: nr.time ? timeLabel(d) : 'Time TBA' });
     m.nextDate = d;
     m.nextName = nr.raceName; m.nextTimed = !!nr.time;
     m.slate = { date:d, tbd:!nr.time, mono:cfg.mono, color:cfg.color, what:`${cfg.abbr} ${nr.raceName.replace(' Grand Prix',' GP')}`, tv:'' };
@@ -577,7 +588,7 @@ async function loadIndyCar(cfg){
     const d = new Date(rc?.date || lastEv.date);
     const weWon = win && ours(athleteName(win));
     m.rows.push({ k:'Last', res: weWon ? 'W' : '', v: esc(lastEv.name || lastCal?.label || 'Last race'),
-      note: `${best}${win && !weWon ? `. Won by ${lastName(athleteName(win))}` : ''}`, d: dayLabel(d) });
+      note: `${best}${win && !weWon ? `. Won by ${lastName(athleteName(win))}` : ''}`, dd: isoOf(d) });
     m.lastDate = d;
   }
 
@@ -588,7 +599,7 @@ async function loadIndyCar(cfg){
     const rc = ev ? raceComp(ev) : null;
     const d = rc?.date ? new Date(rc.date) : nextCal.start;
     const tv = rc ? tvOf(rc) : '';
-    m.rows.push({ k:'Next', v: esc(nextCal.label), d: dayLabel(d), dsub: [rc?.date ? timeLabel(d) : 'Time TBA', tv].filter(Boolean).join(', ') });
+    m.rows.push({ k:'Next', v: esc(nextCal.label), dd: isoOf(d), dsub: [rc?.date ? timeLabel(d) : 'Time TBA', tv].filter(Boolean).join(', ') });
     m.nextDate = d;
     m.nextName = nextCal.label; m.nextTimed = !!rc?.date;
     m.slate = { date:d, tbd:!rc?.date, mono:cfg.mono, color:cfg.color, what:`${cfg.abbr} ${nextCal.label}`, tv };
@@ -629,7 +640,7 @@ async function fedexTop5(){
     .sort((a,b) => a.pos - b.pos).slice(0,5);
 }
 async function loadGolf(cfg){
-  const sb = await getJSON(`${ESPN}/golf/pga/scoreboard?_=${Date.now()}`);
+  const sb = await getJSON(`${ESPN}/golf/pga/scoreboard`);
   const cal = calendarOf(sb);
   const now = Date.now();
   const m = { name:cfg.label, mono:cfg.mono, color:cfg.color, link:'https://www.espn.com/golf/leaderboard', chips:[], rows:[], big:'', bigSub:'' };
@@ -660,7 +671,7 @@ async function loadGolf(cfg){
   if(!m.live){
     const nc = (ev && !isFinal(ev)) ? { label:ev.name, start:new Date(ev.date), end:new Date(ev.endDate || +new Date(ev.date)+3*DAY) } : cal.find(c => c.start > now);
     if(nc){
-      m.rows.push({ k:'Next', v: esc(nc.label), d: dayLabel(nc.start),
+      m.rows.push({ k:'Next', v: esc(nc.label), dd: isoOf(nc.start),
         dsub: `through ${nc.end.toLocaleDateString([], { month:'short', day:'numeric' })}` });
       m.nextDate = nc.start;
       m.slate = { date:nc.start, tbd:true, mono:cfg.mono, color:cfg.color, what:`${cfg.abbr} ${nc.label}`, tv:'' };
@@ -708,15 +719,17 @@ function cardHTML(m){
   const rows = m.rows.map(r => `<div class="row">
       <span class="k">${r.k}</span>
       <span class="v ${r.live ? 'live' : ''}">${r.live ? '<span class="dot" aria-hidden="true"></span>' : ''}${r.res ? `<span class="res ${r.res}">${r.res}</span>` : ''}${r.v}${r.note ? `<span class="note">${esc(r.note)}</span>` : ''}${r.lines ? `<ol class="lb">${r.lines.map(l => `<li><span>${esc(l.n)}</span><b>${esc(l.s)}</b></li>`).join('')}</ol>` : ''}</span>
-      <span class="d">${r.d || ''}${r.dsub ? `<small>${esc(r.dsub)}</small>` : ''}</span></div>`).join('');
+      <span class="d">${r.dd ? dayLabel(new Date(r.dd)) : (r.d || '')}${r.dsub ? `<small>${esc(r.dsub)}</small>` : ''}</span></div>`).join('');
   const form = m.form?.length && m.inSeason ? `<div class="form" aria-label="Last ${m.form.length} results"><em>Form</em>${m.form.map(f => `<span class="${f}" title="${f}"></span>`).join('')}</div>` : '';
+  const stale = m.fetchedAt && Date.now() - m.fetchedAt > 6*3600e3
+    ? `<p class="err">Saved data from ${esc(dayLabel(new Date(m.fetchedAt)))}, ${esc(timeLabel(new Date(m.fetchedAt)))}. Couldn't refresh this team.</p>` : '';
   return `<article class="card ${m.inSeason ? '' : 'off'} ${!m.inSeason && m.preseason ? 'pre' : ''}" style="--tc:${esc(m.color)}">
     <div class="head">${badge(m)}
       <div><div class="name">${m.link ? `<a href="${esc(m.link)}" target="_blank" rel="noopener">${esc(m.name)}</a>` : esc(m.name)}</div>
         ${m.chips.length ? `<div class="chips">${m.chips.map(c => `<span class="chip ${c.cls||''}">${esc(c.t)}</span>`).join('')}</div>` : ''}</div>
       <div class="big">${esc(m.big)}${m.bigSub ? `<small>${esc(m.bigSub)}</small>` : ''}</div>
     </div>
-    <div class="rows">${rows}</div>${form}</article>`;
+    <div class="rows">${rows}</div>${form}${stale}</article>`;
 }
 function minsUntil(d){ const x = Math.round((+new Date(d) - Date.now()) / 60e3); return x <= 0 ? 'Starting now' : `Starts in ${x} min`; }
 function liveTop(c){
@@ -799,7 +812,7 @@ function render(){
 
   // Slate: everything tracked, next 7 days
   const horizon = Date.now() + 7*DAY;
-  const items = Object.values(state).filter(m => m.slate && (m.slate.live || +new Date(m.slate.date) < horizon))
+  const items = Object.values(state).filter(m => m.slate && (m.slate.live || (+new Date(m.slate.date) < horizon && +new Date(m.slate.date) > Date.now() - 4*3600e3)))
     .map(m => ({ ...m.slate, date:new Date(m.slate.date), fam: m.group === 'family' }))
     .sort((a,b) => (b.live - a.live) || (a.date - b.date));
   const slate = $('#slate');
@@ -820,16 +833,23 @@ let timer = null;
 async function refreshAll(){
   const btn = $('#refresh'); btn.disabled = true; btn.textContent = 'Updating…';
   sbCache = new Map();
+  const failed = [];
   await Promise.all(TEAMS.map(async cfg => {
-    try{ state[keyOf(cfg)] = finish(cfg, await LOADERS[cfg.kind](cfg)); }
+    try{ const m = finish(cfg, await LOADERS[cfg.kind](cfg)); m.fetchedAt = Date.now(); state[keyOf(cfg)] = m; }
     catch(e){
+      failed.push(`${cfg.abbr}: ${e?.message || e}`);
+      console.warn('Scoreboard load failed', cfg.abbr, e);
       const prev = state[keyOf(cfg)];
       if(!prev) state[keyOf(cfg)] = finish(cfg, { name:cfg.label, mono:cfg.mono, color:cfg.color, error:true, chips:[], rows:[] });
     }
     render();
   }));
   saveCache();
-  $('#updated').textContent = `Updated ${timeLabel(new Date())}`;
+  const upd = $('#updated');
+  if(!failed.length){ upd.textContent = `Updated ${timeLabel(new Date())}`; upd.title = ''; }
+  else if(failed.length < TEAMS.length){ upd.textContent = `Updated ${timeLabel(new Date())}, ${failed.length} couldn't load`; upd.title = failed.join('\n'); }
+  else { upd.textContent = `Couldn't reach the score feeds (${failed[0].split(': ').slice(1).join(': ')}). Showing saved data.`; upd.title = failed.join('\n'); }
+  render();
   btn.disabled = false; btn.textContent = 'Refresh';
   clearTimeout(timer);
   // 30s while anything is live or about to start; otherwise wake up right at the next start time
