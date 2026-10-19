@@ -518,10 +518,16 @@ async function loadTeam(cfg){
     const old = Date.now() - d > 120*DAY;
     m.rows.push({ k:'Last', res:L,
       v:`${esc(scoreOf(me))}–${esc(scoreOf(opp))} ${esc(oppLabel(me, opp))}`,
-      note: old ? 'Last season' : (last.competitions?.[0]?.notes?.[0]?.headline || ''),
+      note: old ? 'Last season' : isPre(last) ? 'Preseason' : (last.competitions?.[0]?.notes?.[0]?.headline || ''),
       dd: isoOf(d), dsub: d.getFullYear() !== new Date().getFullYear() ? String(d.getFullYear()) : '' });
     m.lastDate = d;
-    m.form = done.filter(e => !isPre(e) && Date.parse(e.date) >= (events.seasonStart || 0)).slice(-5)
+    const seasonDone = done.filter(e => !isPre(e) && Date.parse(e.date) >= (events.seasonStart || 0));
+    // Only preseason games so far: don't show preseason record/standings as if they were real
+    if(!seasonDone.length && isPre(last) && !soccer){
+      m.big = '0-0';
+      m.chips = m.chips.filter(c => c.cls === 'rank');   // keep AP rank (preseason poll is real), drop standings
+    }
+    m.form = seasonDone.slice(-5)
       .map(e => { const s = sides(e, cfg.id); return resultLetter(s.me, s.opp, soccer); }).filter(Boolean);
   } else {
     m.rows.push({ k:'Last', v:'No games yet', d:'' });
