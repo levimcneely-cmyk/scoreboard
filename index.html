@@ -414,24 +414,33 @@ async function teamEvents(sport, league, id){
   const mine = es => es.filter(e => hasTeam(e, id));
   const cur = await leagueScoreboard(sport, league);
   let all = mine(cur?.events || []);
+  // Look back far enough for the last 5 games of this season (preseason doesn't count)
+  const ss = Date.parse(cur?.leagues?.[0]?.season?.startDate || '');
+  const seasonStart = isNaN(ss) ? Date.now() - 150*DAY : ss;
+  const seasonGames = () => all.filter(e => isFinal(e) && !isPre(e) && Date.parse(e.date) >= seasonStart).length;
   if(WEEKLY.has(league)){
     const wk = cur?.week?.number, st = cur?.season?.type ?? 2, yr = cur?.season?.year;
     if(wk){
-      const boards = await Promise.all([-2,-1,1,2,3].map(o => wk + o).filter(w => w > 0)
-        .map(w => boardFor(sport, league, `week=${w}&seasontype=${st}${yr ? `&dates=${yr}` : ''}`, 1)));
+      const boards = await Promise.all([...span(-8,-1), 1, 2, 3].map(o => wk + o).filter(w => w > 0)
+        .map(w => boardFor(sport, league, `week=${w}&seasontype=${st}${yr ? `&dates=${yr}` : ''}`, w < wk - 1 ? 24 : 1)));
       boards.forEach(j => { all = all.concat(mine(j?.events || [])); });
     }
   } else {
     const dayQ = o => `dates=${ymd(new Date(Date.now() + o*DAY))}`;
-    const days = async offs => (await Promise.all(offs.map(o => boardFor(sport, league, dayQ(o), Math.abs(o) >= 2 ? 6 : 0))))
+    const days = async offs => (await Promise.all(offs.map(o => boardFor(sport, league, dayQ(o), o <= -2 ? 24 : Math.abs(o) >= 2 ? 6 : 0))))
       .flatMap(j => mine(j?.events || []));
-    for(const [a,b] of [[-7,-1], [-28,-8]]){ if(all.some(isFinal)) break; all = all.concat(await days(span(a,b))); }
+    for(const [a,b] of [[-7,-1], [-21,-8], [-45,-22], [-80,-46], [-120,-81]]){
+      if(seasonGames() >= 5 || Date.now() + b*DAY < seasonStart) break;
+      all = all.concat(await days(span(a,b).filter(o => Date.now() + o*DAY >= seasonStart - DAY)));
+    }
     for(const [a,b] of [[0,7], [8,21], [22,45]]){ if(all.some(e => !isFinal(e))) break; all = all.concat(await days(span(a,b))); }
   }
   // keep the freshest copy of each game (the live board first)
   const byId = new Map();
   all.forEach(e => { if(!byId.has(e.id)) byId.set(e.id, e); });
-  return [...byId.values()];
+  const out = [...byId.values()];
+  out.seasonStart = seasonStart;
+  return out;
 }
 function infoFromStandings(cfg, st, events){
   const e = st?.entry, soccer = cfg.sport === 'soccer';
@@ -512,7 +521,8 @@ async function loadTeam(cfg){
       note: old ? 'Last season' : (last.competitions?.[0]?.notes?.[0]?.headline || ''),
       dd: isoOf(d), dsub: d.getFullYear() !== new Date().getFullYear() ? String(d.getFullYear()) : '' });
     m.lastDate = d;
-    m.form = done.slice(-5).map(e => { const s = sides(e, cfg.id); return resultLetter(s.me, s.opp, soccer); }).filter(Boolean);
+    m.form = done.filter(e => !isPre(e) && Date.parse(e.date) >= (events.seasonStart || 0)).slice(-5)
+      .map(e => { const s = sides(e, cfg.id); return resultLetter(s.me, s.opp, soccer); }).filter(Boolean);
   } else {
     m.rows.push({ k:'Last', v:'No games yet', d:'' });
   }
