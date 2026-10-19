@@ -382,7 +382,8 @@ function shortGroup(n){
     .replace(/^English /, '').replace(/ Conference$/, '').replace(/ Division$/, '').trim();
 }
 async function standingsInfo(sport, league, id){
-  const j = await soft(getJSON(`${ESPN_V2}/${sport}/${league}/standings`));
+  const lvl = /^(nfl|mlb)$/.test(league) ? '?level=3' : '';   // divisions, not whole leagues
+  const j = await soft(getJSON(`${ESPN_V2}/${sport}/${league}/standings${lvl}`));
   if(!j) return null;
   let found = null;
   (function walk(node){
@@ -397,22 +398,48 @@ async function standingsInfo(sport, league, id){
   })(j);
   return found;
 }
-const RANGE = { baseball:[10,14,60], basketball:[10,14,60], football:[45,30,150], soccer:[45,30,150] };
-async function rangeEvents(sport, league, id){
-  const [back, fwd, far] = RANGE[sport] || [30,30,120];
-  const now = Date.now(), g = SB_GROUPS[league] || '';
-  const get = (a,b) => soft(getJSON(`${ESPN}/${sport}/${league}/scoreboard?limit=1000${g}&dates=${ymd(a)}-${ymd(b)}`));
-  const mine = j => (j?.events || []).filter(e => hasTeam(e, id));
-  let ev = mine(await get(now - back*DAY, now + fwd*DAY));
-  if(!ev.some(e => !isFinal(e))) ev = ev.concat(mine(await get(now + fwd*DAY, now + far*DAY)));
-  return ev;
+// Scoreboards by single day (or NFL/college-football week) are the only reliably
+// current source. Date ranges are rejected, and the per-team feed is stale.
+const dayCache = new Map();
+function boardFor(sport, league, q, cacheHours = 0){
+  const k = `${sport}/${league}?${q}`, hit = dayCache.get(k);
+  if(hit && Date.now() - hit.at < cacheHours*3600e3) return hit.p;
+  const p = soft(getJSON(`${ESPN}/${sport}/${league}/scoreboard?limit=500${SB_GROUPS[league] || ''}&${q}`));
+  dayCache.set(k, { at:Date.now(), p });
+  return p;
+}
+const WEEKLY = new Set(['nfl', 'college-football']);
+const span = (a,b) => Array.from({ length:b-a+1 }, (_,i) => a+i);
+async function teamEvents(sport, league, id){
+  const mine = es => es.filter(e => hasTeam(e, id));
+  const cur = await leagueScoreboard(sport, league);
+  let all = mine(cur?.events || []);
+  if(WEEKLY.has(league)){
+    const wk = cur?.week?.number, st = cur?.season?.type ?? 2, yr = cur?.season?.year;
+    if(wk){
+      const boards = await Promise.all([-2,-1,1,2,3].map(o => wk + o).filter(w => w > 0)
+        .map(w => boardFor(sport, league, `week=${w}&seasontype=${st}${yr ? `&dates=${yr}` : ''}`, 1)));
+      boards.forEach(j => { all = all.concat(mine(j?.events || [])); });
+    }
+  } else {
+    const dayQ = o => `dates=${ymd(new Date(Date.now() + o*DAY))}`;
+    const days = async offs => (await Promise.all(offs.map(o => boardFor(sport, league, dayQ(o), Math.abs(o) >= 2 ? 6 : 0))))
+      .flatMap(j => mine(j?.events || []));
+    for(const [a,b] of [[-7,-1], [-28,-8]]){ if(all.some(isFinal)) break; all = all.concat(await days(span(a,b))); }
+    for(const [a,b] of [[0,7], [8,21], [22,45]]){ if(all.some(e => !isFinal(e))) break; all = all.concat(await days(span(a,b))); }
+  }
+  // keep the freshest copy of each game (the live board first)
+  const byId = new Map();
+  all.forEach(e => { if(!byId.has(e.id)) byId.set(e.id, e); });
+  return [...byId.values()];
 }
 function infoFromStandings(cfg, st, events){
   const e = st?.entry, soccer = cfg.sport === 'soccer';
   const t = e?.team || {};
   // team look from any game we found
-  const anyComp = events.flatMap(ev => ev.competitions?.[0]?.competitors || []).find(c => String(c.team?.id ?? c.id) === String(cfg.id));
-  const ct = anyComp?.team || {};
+  const myComps = events.flatMap(ev => ev.competitions?.[0]?.competitors || []).filter(c => String(c.team?.id ?? c.id) === String(cfg.id));
+  const anyComp = myComps.find(c => rankOf(c)) || myComps[0];
+  const ct = myComps.find(c => c.team?.color)?.team || anyComp?.team || {};
   const overall = statOf(e, 'overall', 'total')?.displayValue
     || (statVal(e,'wins') != null ? [statVal(e,'wins'), statVal(e,'losses'), statVal(e,'ties') || null].filter(x => x != null).join('-') : '');
   const conf = statOf(e, 'vsConf', 'CONF', 'vsconf')?.displayValue || '';
@@ -437,70 +464,32 @@ function infoFromStandings(cfg, st, events){
 
 async function loadTeam(cfg){
   const leagues = cfg.leagues || [cfg.league];
-  let tj = null, league = null;
+  let st = null, league = null;
   for(const lg of leagues){
-    const j = await soft(getJSON(`${ESPN}/${cfg.sport}/${lg}/teams/${cfg.id}`));
-    if(j?.team){ tj = j; league = lg; break; }
+    st = await standingsInfo(cfg.sport, lg, cfg.id);
+    if(st){ league = lg; break; }
   }
-  let st = null;
-  if(!tj){   // per-team endpoint blocked: find the team in standings instead
-    for(const lg of leagues){
-      st = await standingsInfo(cfg.sport, lg, cfg.id);
-      if(st){ league = lg; break; }
-    }
-    league = league || leagues[0];
-  }
-  const t = tj?.team || {};
-  const base = `${ESPN}/${cfg.sport}/${league}/teams/${cfg.id}/schedule`;
+  league = league || leagues[0];
   const soccer = cfg.sport === 'soccer';
+  const events = await teamEvents(cfg.sport, league, cfg.id);
+  if(!st && !events.length) throw new Error('No data from ESPN');
+  const fb = infoFromStandings(cfg, st, events);
 
-  const sched = tj ? await soft(getJSON(base)) : null;
-  let events = sched?.events || [];
-  if(soccer && sched){ // upcoming fixtures live on a separate list for soccer
-    const fx = await soft(getJSON(`${base}?fixture=true`));
-    events = events.concat(fx?.events || []);
-  }
-  if(!sched) events = await rangeEvents(cfg.sport, league, cfg.id);
-  if(!tj && !st && !events.length) throw new Error('No data from ESPN');
-  const fb = tj ? null : infoFromStandings(cfg, st, events);
-  let done = events.filter(isFinal);
-  if(!done.length && sched?.season?.year){
-    const prev = await soft(getJSON(`${base}?season=${sched.season.year - 1}`));
-    done = (prev?.events || []).filter(isFinal);
-  }
-  // Merge in today's real-time scoreboard for this team
-  const sb = await leagueScoreboard(cfg.sport, league);
-  const today = (sb?.events || []).filter(e => hasTeam(e, cfg.id));
-  const liveNow = today.find(isLive);
-  today.filter(isFinal).forEach(f => { done = done.filter(d => d.id !== f.id); done.push(f); });
-  done.sort((a,b) => new Date(a.date) - new Date(b.date));
+  const done = events.filter(isFinal).sort((a,b) => new Date(a.date) - new Date(b.date));
   const last = done.at(-1);
-  const doneIds = new Set(done.map(e => e.id));
-  const fresh = new Map(today.map(e => [e.id, e]));
-
-  const seen = new Set();
-  const upcoming = [...today.filter(e => !isFinal(e)), ...(t.nextEvent || []), ...events.filter(e => !isFinal(e))]
-    .map(e => fresh.get(e?.id) || e)              // prefer the real-time copy of any game
-    .filter(e => e && !doneIds.has(e.id) && !seen.has(e.id) && seen.add(e.id))
+  const upcoming = events.filter(e => !isFinal(e))
     .filter(e => isLive(e) || new Date(e.date) > Date.now() - 4*3600e3)
     .sort((a,b) => new Date(a.date) - new Date(b.date));
-  const nxt = liveNow || upcoming.find(isLive) || upcoming[0];
+  const nxt = upcoming.find(isLive) || upcoming[0];
   const nextReal = upcoming.find(e => !isPre(e));   // preseason games don't make a team "in season"
 
-  // standings + record
-  const items = t.record?.items || [];
-  const total = items.find(i => i.type === 'total') || items[0];
-  const conf = items.find(i => /conf/i.test(`${i.type} ${i.description} ${i.name}`));
-  const stat = (it, n) => it?.stats?.find(s => s.name === n)?.value;
+  // standings chips
   const chips = [];
-  const apRank = t.rank || fb?.apRank;
-  if(apRank && apRank <= 25) chips.push({ t:`#${apRank} AP`, cls:'rank' });
-  const summary = t.standingSummary || fb?.summary;
-  if(summary) chips.push({ t:summary });
-  const confRec = conf?.summary || fb?.conf;
-  if(confRec && cfg.sport !== 'soccer' && !/mlb|nba|nfl/.test(league)) chips.push({ t:`${confRec} conf` });
-  const gb = fb ? parseFloat(fb.gb) : stat(total, 'gamesBehind');
-  if(cfg.league === 'mlb' && gb != null && gb > 0) chips.push({ t:`${gb} GB` });
+  if(fb.apRank && fb.apRank <= 25) chips.push({ t:`#${fb.apRank} AP`, cls:'rank' });
+  if(fb.summary) chips.push({ t:fb.summary });
+  if(fb.conf && /college/.test(league)) chips.push({ t:`${fb.conf} conf` });
+  const gb = parseFloat(fb.gb);
+  if(cfg.league === 'mlb' && gb > 0) chips.push({ t:`${gb} GB` });
   if(cfg.league === 'mlb'){
     const s = (await mlbStandings())[String(cfg.id)];
     if(s?.league && s.lg) chips.push({ t:`${ordinal(s.league)} in ${s.lg}` });
@@ -508,17 +497,10 @@ async function loadTeam(cfg){
     if(s?.seed > 0 && s.seed <= 6) chips.push({ t:`${s.lg || ''} ${s.seed} seed`.trim(), cls:'rank' });
   }
 
-  let big = total?.summary || fb?.overall || '', bigSub = '';
-  if(soccer && fb && fb.points != null){ big = `${fb.points} pts`; bigSub = fb.wdl ? `${fb.wdl} W-D-L` : ''; }
-  else if(soccer){
-    const pts = stat(total, 'points');
-    if(pts != null){ big = `${pts} pts`; bigSub = total?.summary ? `${total.summary} W-D-L` : ''; }
-  }
+  let big = fb.overall || '', bigSub = '';
+  if(soccer && fb.points != null){ big = `${fb.points} pts`; bigSub = fb.wdl ? `${fb.wdl} W-D-L` : ''; }
 
-  const m = {
-    name: cfg.label, logo: t.logos?.[0]?.href || fb?.logo, color: t.color ? '#'+t.color : (fb?.color || '#888'),
-    link: t.links?.[0]?.href || fb?.link, chips, big, bigSub, rows: [], form: []
-  };
+  const m = { name: cfg.label, logo: fb.logo, color: fb.color, link: fb.link, chips, big, bigSub, rows: [], form: [] };
 
   if(last){
     const { me, opp } = sides(last, cfg.id);
