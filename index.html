@@ -371,6 +371,70 @@ async function buildLiveCard(cfg, league, ev, color){
   return card;
 }
 
+// ---------- Fallback path: build a team card from standings + scoreboards ----------
+// ESPN's /teams/{id} endpoint can refuse browser requests; the standings and
+// scoreboard feeds stay open, so everything here can come from those instead.
+const statOf = (e, ...names) => (e?.stats || []).find(s => names.includes(s.name) || names.includes(s.abbreviation) || names.includes(s.type));
+const statVal = (e, ...n) => { const s = statOf(e, ...n); return s ? (s.value ?? parseFloat(s.displayValue)) : null; };
+const recPct = r => { const m = String(r || '').match(/(\d+)-(\d+)(?:-(\d+))?/); if(!m) return null; const w=+m[1], l=+m[2], t=+(m[3]||0); return w+l+t ? (w + t/2) / (w+l+t) : 0; };
+function shortGroup(n){
+  return String(n || '').replace(/^American League/, 'AL').replace(/^National League/, 'NL')
+    .replace(/^English /, '').replace(/ Conference$/, '').replace(/ Division$/, '').trim();
+}
+async function standingsInfo(sport, league, id){
+  const j = await soft(getJSON(`${ESPN_V2}/${sport}/${league}/standings`));
+  if(!j) return null;
+  let found = null;
+  (function walk(node){
+    if(!node || typeof node !== 'object' || found) return;
+    if(Array.isArray(node)) return node.forEach(walk);
+    const entries = node.standings?.entries;
+    if(Array.isArray(entries)){
+      const e = entries.find(x => String(x.team?.id) === String(id));
+      if(e){ found = { entry:e, entries, group: node.name || node.abbreviation || '' }; return; }
+    }
+    Object.entries(node).forEach(([k,v]) => { if(k !== 'standings') walk(v); });
+  })(j);
+  return found;
+}
+const RANGE = { baseball:[10,14,60], basketball:[10,14,60], football:[45,30,150], soccer:[45,30,150] };
+async function rangeEvents(sport, league, id){
+  const [back, fwd, far] = RANGE[sport] || [30,30,120];
+  const now = Date.now(), g = SB_GROUPS[league] || '';
+  const get = (a,b) => soft(getJSON(`${ESPN}/${sport}/${league}/scoreboard?limit=1000${g}&dates=${ymd(a)}-${ymd(b)}`));
+  const mine = j => (j?.events || []).filter(e => hasTeam(e, id));
+  let ev = mine(await get(now - back*DAY, now + fwd*DAY));
+  if(!ev.some(e => !isFinal(e))) ev = ev.concat(mine(await get(now + fwd*DAY, now + far*DAY)));
+  return ev;
+}
+function infoFromStandings(cfg, st, events){
+  const e = st?.entry, soccer = cfg.sport === 'soccer';
+  const t = e?.team || {};
+  // team look from any game we found
+  const anyComp = events.flatMap(ev => ev.competitions?.[0]?.competitors || []).find(c => String(c.team?.id ?? c.id) === String(cfg.id));
+  const ct = anyComp?.team || {};
+  const overall = statOf(e, 'overall', 'total')?.displayValue
+    || (statVal(e,'wins') != null ? [statVal(e,'wins'), statVal(e,'losses'), statVal(e,'ties') || null].filter(x => x != null).join('-') : '');
+  const conf = statOf(e, 'vsConf', 'CONF', 'vsconf')?.displayValue || '';
+  let rank = statVal(e, 'rank');
+  if(!(rank > 0) && st){
+    const key = x => soccer ? (statVal(x,'points') ?? 0)
+      : (conf ? recPct(statOf(x,'vsConf','CONF','vsconf')?.displayValue) : null) ?? statVal(x,'winPercent') ?? recPct(statOf(x,'overall','total')?.displayValue) ?? 0;
+    rank = [...st.entries].sort((a,b) => key(b) - key(a)).findIndex(x => x === e) + 1;
+  }
+  return {
+    logo: t.logos?.[0]?.href || ct.logo || ct.logos?.[0]?.href,
+    color: (t.color || ct.color) ? '#' + (t.color || ct.color) : '#888',
+    link: t.links?.[0]?.href || '',
+    apRank: rankOf(anyComp),
+    summary: rank > 0 && st?.group ? `${ordinal(rank)} in ${shortGroup(st.group)}` : '',
+    overall, conf,
+    gb: statOf(e, 'gamesBehind', 'GB')?.displayValue,
+    points: statVal(e, 'points'),
+    wdl: soccer && statVal(e,'wins') != null ? `${statVal(e,'wins')}-${statVal(e,'ties') ?? 0}-${statVal(e,'losses')}` : ''
+  };
+}
+
 async function loadTeam(cfg){
   const leagues = cfg.leagues || [cfg.league];
   let tj = null, league = null;
@@ -378,17 +442,27 @@ async function loadTeam(cfg){
     const j = await soft(getJSON(`${ESPN}/${cfg.sport}/${lg}/teams/${cfg.id}`));
     if(j?.team){ tj = j; league = lg; break; }
   }
-  if(!tj) throw new Error('Team lookup failed');
-  const t = tj.team;
+  let st = null;
+  if(!tj){   // per-team endpoint blocked: find the team in standings instead
+    for(const lg of leagues){
+      st = await standingsInfo(cfg.sport, lg, cfg.id);
+      if(st){ league = lg; break; }
+    }
+    league = league || leagues[0];
+  }
+  const t = tj?.team || {};
   const base = `${ESPN}/${cfg.sport}/${league}/teams/${cfg.id}/schedule`;
   const soccer = cfg.sport === 'soccer';
 
-  const sched = await soft(getJSON(base));
+  const sched = tj ? await soft(getJSON(base)) : null;
   let events = sched?.events || [];
-  if(soccer){ // upcoming fixtures live on a separate list for soccer
+  if(soccer && sched){ // upcoming fixtures live on a separate list for soccer
     const fx = await soft(getJSON(`${base}?fixture=true`));
     events = events.concat(fx?.events || []);
   }
+  if(!sched) events = await rangeEvents(cfg.sport, league, cfg.id);
+  if(!tj && !st && !events.length) throw new Error('No data from ESPN');
+  const fb = tj ? null : infoFromStandings(cfg, st, events);
   let done = events.filter(isFinal);
   if(!done.length && sched?.season?.year){
     const prev = await soft(getJSON(`${base}?season=${sched.season.year - 1}`));
@@ -419,10 +493,13 @@ async function loadTeam(cfg){
   const conf = items.find(i => /conf/i.test(`${i.type} ${i.description} ${i.name}`));
   const stat = (it, n) => it?.stats?.find(s => s.name === n)?.value;
   const chips = [];
-  if(t.rank && t.rank <= 25) chips.push({ t:`#${t.rank} AP`, cls:'rank' });
-  if(t.standingSummary) chips.push({ t:t.standingSummary });
-  if(conf?.summary) chips.push({ t:`${conf.summary} conf` });
-  const gb = stat(total, 'gamesBehind');
+  const apRank = t.rank || fb?.apRank;
+  if(apRank && apRank <= 25) chips.push({ t:`#${apRank} AP`, cls:'rank' });
+  const summary = t.standingSummary || fb?.summary;
+  if(summary) chips.push({ t:summary });
+  const confRec = conf?.summary || fb?.conf;
+  if(confRec && cfg.sport !== 'soccer' && !/mlb|nba|nfl/.test(league)) chips.push({ t:`${confRec} conf` });
+  const gb = fb ? parseFloat(fb.gb) : stat(total, 'gamesBehind');
   if(cfg.league === 'mlb' && gb != null && gb > 0) chips.push({ t:`${gb} GB` });
   if(cfg.league === 'mlb'){
     const s = (await mlbStandings())[String(cfg.id)];
@@ -431,15 +508,16 @@ async function loadTeam(cfg){
     if(s?.seed > 0 && s.seed <= 6) chips.push({ t:`${s.lg || ''} ${s.seed} seed`.trim(), cls:'rank' });
   }
 
-  let big = total?.summary || '', bigSub = '';
-  if(soccer){
+  let big = total?.summary || fb?.overall || '', bigSub = '';
+  if(soccer && fb && fb.points != null){ big = `${fb.points} pts`; bigSub = fb.wdl ? `${fb.wdl} W-D-L` : ''; }
+  else if(soccer){
     const pts = stat(total, 'points');
     if(pts != null){ big = `${pts} pts`; bigSub = total?.summary ? `${total.summary} W-D-L` : ''; }
   }
 
   const m = {
-    name: cfg.label, logo: t.logos?.[0]?.href, color: t.color ? '#'+t.color : '#888',
-    link: t.links?.[0]?.href, chips, big, bigSub, rows: [], form: []
+    name: cfg.label, logo: t.logos?.[0]?.href || fb?.logo, color: t.color ? '#'+t.color : (fb?.color || '#888'),
+    link: t.links?.[0]?.href || fb?.link, chips, big, bigSub, rows: [], form: []
   };
 
   if(last){
@@ -689,7 +767,8 @@ function finish(cfg, m){
   m.inSeason = !!(m.live
     || ((m.seasonNextDate !== undefined ? m.seasonNextDate : m.nextDate) && +new Date(m.seasonNextDate !== undefined ? m.seasonNextDate : m.nextDate) - now < win*DAY)
     || (m.lastDate && now - +new Date(m.lastDate) < LAST_WINDOW*DAY));
-  m.sortKey = m.live ? 0
+  m.sortKey = m.error ? Date.now() + 90*DAY
+    : m.live ? 0
     : m.inSeason ? (m.nextDate ? +new Date(m.nextDate) : now + 60*DAY)
     : m.preseason ? 1e14 + +new Date(m.nextDate)   // top of the greyed-out group
     : Infinity;
@@ -713,7 +792,7 @@ function badge(m){
     : `<div class="mono" style="--tc:${esc(m.color)}">${esc(m.mono || m.name.slice(0,3))}</div>`;
 }
 function cardHTML(m){
-  if(m.error) return `<article class="card off" style="--tc:${esc(m.color||'#888')}">
+  if(m.error) return `<article class="card" style="--tc:${esc(m.color||'#888')}">
       <div class="head">${badge(m)}<div><div class="name">${esc(m.name)}</div></div><div></div></div>
       <p class="err">Couldn't load this one right now. Tap Refresh to try again.</p></article>`;
   const rows = m.rows.map(r => `<div class="row">
@@ -840,7 +919,7 @@ async function refreshAll(){
       failed.push(`${cfg.abbr}: ${e?.message || e}`);
       console.warn('Scoreboard load failed', cfg.abbr, e);
       const prev = state[keyOf(cfg)];
-      if(!prev) state[keyOf(cfg)] = finish(cfg, { name:cfg.label, mono:cfg.mono, color:cfg.color, error:true, chips:[], rows:[] });
+      if(!prev) state[keyOf(cfg)] = finish(cfg, { name:cfg.label, mono:cfg.mono || cfg.abbr, color:cfg.color, error:true, chips:[], rows:[] });
     }
     render();
   }));
