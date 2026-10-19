@@ -314,11 +314,30 @@ function mlbStandings(){
 // are cached for a long time, which made live games show up late with 0-0 scores.
 const SB_GROUPS = { 'college-football':'&groups=80', 'mens-college-basketball':'&groups=50' };
 let sbCache = new Map();
+// ESPN serves scoreboards from two hosts whose caches go stale independently,
+// so ask both and keep the most up-to-date copy of every game.
+const stateRank = e => { const t = stType(e); return t.completed ? 3 : t.state === 'post' ? 2 : t.state === 'in' ? 1 : 0; };
+function mergeEvents(lists){
+  const byId = new Map();
+  lists.flat().forEach(e => { if(!e?.id) return; const cur = byId.get(e.id); if(!cur || stateRank(e) > stateRank(cur)) byId.set(e.id, e); });
+  return [...byId.values()];
+}
+async function dualBoard(path){
+  const [a, b] = await Promise.all([
+    soft(fetchOnce(`https://site.api.espn.com${path}`, 12000)),
+    soft(fetchOnce(`https://site.web.api.espn.com${path}`, 12000))
+  ]);
+  if(!a && !b) return null;
+  return { ...(a || b), events: mergeEvents([a?.events || [], b?.events || []]) };
+}
 function leagueScoreboard(sport, league){
   const k = `${sport}/${league}`;
-  if(!sbCache.has(k)) sbCache.set(k, soft(getJSON(`${ESPN}/${sport}/${league}/scoreboard?limit=300${SB_GROUPS[league] || ''}`)));
+  if(!sbCache.has(k)) sbCache.set(k, dualBoard(`/apis/site/v2/sports/${sport}/${league}/scoreboard?limit=300${SB_GROUPS[league] || ''}`));
   return sbCache.get(k);
 }
+// A game counts as upcoming only if it hasn't finished and isn't a stale leftover from days ago
+const isUpcoming = e => !isFinal(e) && stType(e).state !== 'post' && Date.parse(e.date) > Date.now() - 4*3600e3;
+const isLiveNow = e => isLive(e) && Date.now() - Date.parse(e.date) < 8*3600e3;
 const hasTeam = (e, id) => (e?.competitions?.[0]?.competitors || []).some(c => String(c.team?.id ?? c.id) === String(id));
 
 // ---------- Live now: detailed game card ----------
@@ -404,7 +423,7 @@ const dayCache = new Map();
 function boardFor(sport, league, q, cacheHours = 0){
   const k = `${sport}/${league}?${q}`, hit = dayCache.get(k);
   if(hit && Date.now() - hit.at < cacheHours*3600e3) return hit.p;
-  const p = soft(getJSON(`${ESPN}/${sport}/${league}/scoreboard?limit=500${SB_GROUPS[league] || ''}&${q}`));
+  const p = dualBoard(`/apis/site/v2/sports/${sport}/${league}/scoreboard?limit=500${SB_GROUPS[league] || ''}&${q}`);
   dayCache.set(k, { at:Date.now(), p });
   return p;
 }
@@ -433,12 +452,9 @@ async function teamEvents(sport, league, id){
       if(seasonGames() >= 5 || Date.now() + b*DAY < seasonStart) break;
       all = all.concat(await days(span(a,b).filter(o => Date.now() + o*DAY >= seasonStart - DAY)));
     }
-    for(const [a,b] of [[0,7], [8,21], [22,45]]){ if(all.some(e => !isFinal(e))) break; all = all.concat(await days(span(a,b))); }
+    for(const [a,b] of [[0,7], [8,21], [22,45]]){ if(all.some(e => isUpcoming(e) || isLiveNow(e))) break; all = all.concat(await days(span(a,b))); }
   }
-  // keep the freshest copy of each game (the live board first)
-  const byId = new Map();
-  all.forEach(e => { if(!byId.has(e.id)) byId.set(e.id, e); });
-  const out = [...byId.values()];
+  const out = mergeEvents([all]);   // freshest copy of each game
   out.seasonStart = seasonStart;
   return out;
 }
@@ -486,10 +502,9 @@ async function loadTeam(cfg){
 
   const done = events.filter(isFinal).sort((a,b) => new Date(a.date) - new Date(b.date));
   const last = done.at(-1);
-  const upcoming = events.filter(e => !isFinal(e))
-    .filter(e => isLive(e) || new Date(e.date) > Date.now() - 4*3600e3)
+  const upcoming = events.filter(e => isLiveNow(e) || isUpcoming(e))
     .sort((a,b) => new Date(a.date) - new Date(b.date));
-  const nxt = upcoming.find(isLive) || upcoming[0];
+  const nxt = upcoming.find(isLiveNow) || upcoming[0];
   const nextReal = upcoming.find(e => !isPre(e));   // preseason games don't make a team "in season"
 
   // standings chips
