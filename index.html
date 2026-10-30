@@ -186,6 +186,8 @@ const TEAMS = [
   { group:'mine',   kind:'indycar', label:'Chip Ganassi Racing', abbr:'CGR', mono:'CGR', color:'#C8102E', drivers:['Palou','Dixon','Simpson'] },
   { group:'mine',   kind:'f1',      label:'Red Bull Racing',     abbr:'RBR', mono:'RBR', color:'#1E3A8A', constructorId:'red_bull' },
   { group:'mine',   kind:'team', sport:'basketball', league:'nba',                     id:11,   label:'Pacers', abbr:'PCRS' },
+  // Results come from cycling.json, written by the GitHub job in scripts/cycling.py
+  { group:'mine',   kind:'cycling', label:'Pro Cycling', abbr:'CYCL', mono:'CYCL', color:'#FFD200' },
 
   { group:'family', kind:'team', sport:'football',   league:'college-football',        id:84,   label:'IU Football', abbr:'IUFB' },
   { group:'family', kind:'team', sport:'basketball', league:'mens-college-basketball', id:84,   label:'IU Basketball', abbr:'IUBB' },
@@ -198,7 +200,7 @@ const TEAMS = [
 
 // A team counts as "in season" if its next event is within this many days
 // or its last result is within LAST_WINDOW days.
-const NEXT_WINDOW = { team:21, f1:35, indycar:35, golf:21 };
+const NEXT_WINDOW = { team:21, f1:35, indycar:35, golf:21, cycling:21 };
 const LAST_WINDOW = 10;
 
 /* ============================================================ */
@@ -771,7 +773,144 @@ async function loadGolf(cfg){
   return m;
 }
 
-const LOADERS = { team:loadTeam, f1:loadF1, indycar:loadIndyCar, golf:loadGolf };
+/* ---------- Pro cycling (cycling.json from the GitHub job) ---------- */
+const CYC_SPEED = { ITT:48, TTT:52, p1:44, p2:42, p3:41, p4:38, p5:37 };   // km/h, for a rough finish time
+const dayDate = s => new Date(`${s}T12:00:00`);
+const localYmd = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+const watchOf = r => (r.watch || '').replace(/\s*\(\*\)/, '');
+const shortDate = s => dayDate(s).toLocaleDateString([], { month:'short', day:'numeric' });
+function cycWhen(x){                       // details object -> "1:05 PM, finish around 5:30 PM"
+  if(!x?.start) return '';
+  const st = new Date(x.start);
+  const kph = CYC_SPEED[x.type] || CYC_SPEED[x.profile] || 41;
+  const fin = x.km ? new Date(+st + x.km / kph * 3600e3) : null;
+  return `${timeLabel(st)}${fin ? `, finish around ${timeLabel(fin)}` : ''}`;
+}
+function cycRoute(x){
+  if(!x) return '';
+  const km = x.km ? `${Math.round(x.km)} km (${Math.round(x.km * 0.621)} mi)` : '';
+  const route = x.from && x.to ? `${x.from} to ${x.to}` : '';
+  return [x.terrain, km, route].filter(Boolean).join(', ');
+}
+function cycLines(t, val = 'time'){
+  return (t?.top || []).map(p => ({ n: p.name, s: val === 'pts' ? (p.pts != null ? `${p.pts} pts` : '') : (p.time || '') }));
+}
+function cycHighlights(t, worlds){
+  if(!t) return '';
+  const top = new Set((t.top || []).map(p => p.rank));
+  const f = (who, p) => p && !top.has(p.rank) ? `${who}: ${p.name}, ${ordinal(p.rank)}${p.time && p.time !== 's.t.' && !/^\d+:\d\d:\d\d$/.test(p.time) ? ` (${p.time})` : p.pts != null ? ` (${p.pts} pts)` : ''}` : '';
+  const us = t.usa ? (worlds && t.usaCount > 1 ? f(`Top American (${t.usaCount} finished)`, t.usa) || `${t.usaCount} Americans finished` : f('Top American', t.usa)) : '';
+  return [worlds ? '' : f('Visma', t.visma), us].filter(Boolean).join('. ');
+}
+async function loadCycling(cfg){
+  const m = { name:cfg.label, mono:cfg.mono, color:cfg.color, link:'https://www.procyclingstats.com/races.php', chips:[], rows:[], big:'', bigSub:'' };
+  let j;
+  try { j = await fetchOnce(`cycling.json?t=${Math.floor(Date.now() / 60e3)}`, 12000); }
+  catch(e){
+    m.rows.push({ k:'Setup', v:'Waiting for the first results update', note:'Open the repo on GitHub, go to Actions, pick "Update cycling results" and tap Run workflow.' });
+    return m;
+  }
+  const today = localYmd(), now = Date.now();
+  const eds = [];
+  (j.races || []).forEach(r => Object.entries(r.editions || {}).forEach(([yr, ed]) => { if(ed.start) eds.push({ r, yr, ed }); }));
+  const live = eds.filter(x => x.ed.start <= today && today <= x.ed.end).sort((a,b) => a.ed.start.localeCompare(b.ed.start));
+  const done = eds.filter(x => x.ed.end < today || (x.r.kind === 'one' && x.ed.end === today && x.ed.result))
+    .filter(x => !live.includes(x) || x.ed.result).sort((a,b) => b.ed.end.localeCompare(a.ed.end));
+  const next = eds.filter(x => x.ed.start > today).sort((a,b) => a.ed.start.localeCompare(b.ed.start))[0];
+  const daysSince = x => Math.round((dayDate(today) - dayDate(x.ed.end)) / DAY);
+  const worldsOf = x => x.r.cat === 'Worlds';
+
+  // ---- Racing now ----
+  live.forEach(({ r, ed }) => {
+    if(r.kind === 'one'){
+      const x = ed.details || {};
+      if(!ed.result){
+        m.rows.push({ k:'Today', v: esc(r.name), note: cycRoute(x), d:'Today', dsub: [cycWhen(x), watchOf(r)].filter(Boolean).join(', ') });
+        if(x.start){
+          const st = Date.parse(x.start), dur = (x.km || 200) / (CYC_SPEED[x.type] || CYC_SPEED[x.profile] || 41) * 3600e3;
+          if(now > st - SOON && now < st + dur + 3600e3){
+            if(now >= st) m.live = true;
+            m.liveCard = { kind:'race', abbr:cfg.abbr, color:cfg.color, name:r.name, start:x.start, live: now >= st,
+              detail:'Race underway', sub: cycRoute(x), link: `${ed.url}/result/live`, tv: watchOf(r) };
+          }
+        }
+      }
+      return;
+    }
+    const stages = ed.stages || [];
+    const ranStage = [...stages].reverse().find(s => s.result);
+    const todayStage = stages.find(s => s.date === today);
+    const nextStage = stages.find(s => s.date >= today && !s.result);
+    m.chips.push({ t:`${r.name}, ${todayStage ? `${todayStage.label} of ${stages.length}` : today < ed.start ? 'starts soon' : 'rest day'}`, cls:'rank' });
+    if(nextStage){
+      const x = nextStage;
+      m.rows.push({ k: x.date === today ? 'Today' : 'Next', v: `${esc(r.name)}, ${esc(x.label)}`, note: cycRoute(x),
+        dd: x.date === today ? null : isoOf(dayDate(x.date)), d: x.date === today ? 'Today' : '',
+        dsub: [cycWhen(x), watchOf(r)].filter(Boolean).join(', ') });
+      if(x.date === today && x.start){
+        const st = Date.parse(x.start), dur = (x.km || 180) / (CYC_SPEED[x.type] || CYC_SPEED[x.profile] || 41) * 3600e3;
+        if(now > st - SOON && now < st + dur + 3600e3){
+          if(now >= st) m.live = true;
+          m.liveCard = { kind:'race', abbr:cfg.abbr, color:cfg.color, name:`${r.name}, ${x.label}`, start:x.start, live: now >= st,
+            detail:'Stage underway', sub: cycRoute(x), link: `https://www.procyclingstats.com/${x.url}/live`, tv: watchOf(r),
+            lines: ranStage && ed.cls?.gc ? cycLines(ed.cls.gc).map((l,i) => ({ ...l, n: i ? l.n : `${l.n} (leader)` })) : null };
+        }
+      }
+    }
+    if(ranStage){
+      m.rows.push({ k:'Stage', v: `${esc(ranStage.label)} result`, lines: cycLines(ranStage.result),
+        note: [ranStage.wonHow, cycHighlights(ranStage.result)].filter(Boolean).join('. '), dd: isoOf(dayDate(ranStage.date)) });
+      const c = ed.cls || {}, jer = c.jerseys || {};
+      [['gc','time'], ['points','pts'], ['kom','pts'], ['youth','time']].forEach(([k, val]) => {
+        if(c[k]) m.rows.push({ k: k === 'gc' ? 'GC' : '', v: `${esc(jer[k] || k)} jersey`, lines: cycLines(c[k], val), note: cycHighlights(c[k]) });
+      });
+      if(c.teams) m.rows.push({ k:'', v:'Teams', lines: cycLines(c.teams), note: c.teams.visma && !(c.teams.top || []).some(t => t.rank === c.teams.visma.rank) ? `Visma: ${ordinal(c.teams.visma.rank)} (${c.teams.visma.time})` : '' });
+    }
+    m.lastDate = ranStage ? dayDate(ranStage.date) : dayDate(ed.start);
+    if(nextStage){ m.nextDate = dayDate(nextStage.date); m.nextTimed = !!nextStage.start;
+      m.slate = { date: nextStage.start ? new Date(nextStage.start) : dayDate(nextStage.date), tbd: !nextStage.start, mono:cfg.mono, color:cfg.color,
+        what:`${cfg.abbr} ${r.name} ${nextStage.label}`, tv: watchOf(r) }; }
+  });
+
+  // ---- Grand Tour that finished in the last 2 weeks: final GC top 3 ----
+  const gtDone = done.filter(x => x.r.kind === 'gt' && !live.includes(x) && daysSince(x) <= 14);
+  gtDone.forEach(({ r, ed }) => {
+    if(ed.cls?.gc) m.rows.push({ k:'Final', v: `${esc(r.name)} GC`, lines: cycLines(ed.cls.gc), note: cycHighlights(ed.cls.gc), dd: isoOf(dayDate(ed.end)) });
+  });
+
+  // ---- Latest result (if not already shown above) ----
+  const latest = done.find(x => !gtDone.includes(x) && !(live.includes(x) && x.r.kind !== 'one'));
+  if(latest && !(latest.r.kind === 'gt' && daysSince(latest) > 14)){
+    const { r, ed } = latest;
+    const t = r.kind === 'one' ? ed.result : ed.cls?.gc;
+    m.rows.push({ k:'Last', v: `${esc(r.name)}${r.kind === 'one' ? '' : ' GC'}`, lines: cycLines(t),
+      note: t ? cycHighlights(t, worldsOf(latest)) : (ed.noResult ? 'No result posted' : 'Results not in yet'), dd: isoOf(dayDate(ed.end)) });
+    m.lastDate = m.lastDate || dayDate(ed.end);
+  } else if(latest){
+    m.lastDate = m.lastDate || dayDate(latest.ed.end);
+  }
+
+  // ---- Next race ----
+  if(next){
+    const { r, ed } = next, x = ed.details || {};
+    const range = r.kind === 'one' ? '' : `${shortDate(ed.start)} to ${shortDate(ed.end)}`;
+    m.rows.push({ k:'Next', v: esc(r.name), note: [r.cat, range, cycRoute(x)].filter(Boolean).join(', '),
+      dd: isoOf(dayDate(ed.start)), dsub: [x.start ? cycWhen(x) : '', watchOf(r)].filter(Boolean).join(', ') });
+    if(!m.nextDate){ m.nextDate = dayDate(ed.start);
+      m.slate = { date: x.start ? new Date(x.start) : dayDate(ed.start), tbd: !x.start, mono:cfg.mono, color:cfg.color, what:`${cfg.abbr} ${r.name}`, tv: watchOf(r) }; }
+  } else if(!live.length){
+    m.rows.push({ k:'Next', v:'Next season\u2019s calendar not posted yet', d:'' });
+  }
+
+  // ---- Health of the feed ----
+  const errs = j.errors || [];
+  const behind = live.length && j.checkedAt && now - Date.parse(j.checkedAt) > 36 * 3600e3;
+  m.warn = [behind ? `Results last updated ${dayLabel(new Date(j.checkedAt))}` : '',
+    errs.length ? `Couldn't update ${[...new Set(errs.map(e => e.race))].slice(0,3).join(', ')}${errs.length > 3 ? ' and more' : ''}` : ''].filter(Boolean).join('. ');
+  return m;
+}
+
+const LOADERS = { team:loadTeam, f1:loadF1, indycar:loadIndyCar, golf:loadGolf, cycling:loadCycling };
 
 /* ---------- season + sort ---------- */
 function finish(cfg, m){
@@ -821,7 +960,7 @@ function cardHTML(m){
         ${m.chips.length ? `<div class="chips">${m.chips.map(c => `<span class="chip ${c.cls||''}">${esc(c.t)}</span>`).join('')}</div>` : ''}</div>
       <div class="big">${esc(m.big)}${m.bigSub ? `<small>${esc(m.bigSub)}</small>` : ''}</div>
     </div>
-    <div class="rows">${rows}</div>${form}${stale}</article>`;
+    <div class="rows">${rows}</div>${form}${stale}${m.warn ? `<p class="err">${esc(m.warn)}</p>` : ''}</article>`;
 }
 function minsUntil(d){ const x = Math.round((+new Date(d) - Date.now()) / 60e3); return x <= 0 ? 'Starting now' : `Starts in ${x} min`; }
 function liveTop(c){
@@ -838,8 +977,10 @@ function liveCardHTML(c){
     <div class="name" style="margin-top:6px">${esc(c.name)}</div>
     <ol class="lb">${c.top.map(l => `<li><span>${esc(l.n)}${l.thru !== '' ? ` <small style="color:var(--faint)">thru ${esc(l.thru)}</small>` : ''}</span><b>${esc(l.s)}</b></li>`).join('')}</ol>
     <a class="lvlink" href="${esc(c.link)}" target="_blank" rel="noopener">Full leaderboard</a></article>`;
-  if(c.kind === 'race') return `<article class="card lv" style="--tc:${esc(c.color)}">${liveTop({ ...c, detail:'Race underway' })}
+  if(c.kind === 'race') return `<article class="card lv" style="--tc:${esc(c.color)}">${liveTop({ ...c, detail: c.detail || 'Race underway' })}
     <div class="name" style="margin-top:6px">${esc(c.name)}</div>
+    ${c.sub ? `<div class="lastplay">${esc(c.sub)}</div>` : ''}
+    ${c.lines?.length ? `<div class="lastplay" style="margin-top:8px">GC before today</div><ol class="lb">${c.lines.map(l => `<li><span>${esc(l.n)}</span><b>${esc(l.s)}</b></li>`).join('')}</ol>` : ''}
     <a class="lvlink" href="${esc(c.link)}" target="_blank" rel="noopener">Live timing</a></article>`;
 
   const sa = parseFloat(c.away.score), sh = parseFloat(c.home.score);
