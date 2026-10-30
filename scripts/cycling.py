@@ -216,6 +216,71 @@ def older_than(stamp, hours):
 def d(s):
     return date.fromisoformat(s)
 
+MONTHS = {m: i for i, m in enumerate(["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"], 1)}
+def isodate(s):
+    """'2026-10-10', '10 October 2026' or '10-10-2026' -> '2026-10-10'; anything else -> None."""
+    if not isinstance(s, str):
+        return None
+    s = s.strip()
+    m = re.search(r"(\d{4})-(\d{2})-(\d{2})", s)
+    if m:
+        return m.group(0)
+    m = re.search(r"(\d{1,2})(?:st|nd|rd|th)?\s+([A-Za-z]{3,})\.?\s+(\d{4})", s)
+    if m and m.group(2)[:3].lower() in MONTHS:
+        return f"{m.group(3)}-{MONTHS[m.group(2)[:3].lower()]:02d}-{int(m.group(1)):02d}"
+    m = re.search(r"(\d{1,2})[./-](\d{1,2})[./-](\d{4})", s)
+    if m:
+        return f"{m.group(3)}-{int(m.group(2)):02d}-{int(m.group(1)):02d}"
+    return None
+
+def page_text(obj):
+    """Visible text of a fetched page, one element per line."""
+    try:
+        node = obj.html.body or obj.html.root
+        return node.text(separator="\n")
+    except Exception:
+        return ""
+
+def labeled(text, *labels):
+    """Value on the line after (or beside) a label such as 'Startdate:'."""
+    lines = [x.strip() for x in text.splitlines() if x.strip()]
+    for i, line in enumerate(lines):
+        for lab in labels:
+            if re.fullmatch(rf"{lab}\s*:?", line, re.I):
+                return lines[i + 1] if i + 1 < len(lines) else None
+            m = re.match(rf"{lab}\s*:\s*(.+)", line, re.I)
+            if m:
+                return m.group(1)
+    return None
+
+def race_dates(race):
+    """Start/end dates. PCS moved its info list, so read by label first, position second."""
+    txt = page_text(race)
+    start = isodate(labeled(txt, "Start ?date", "Date"))
+    end = isodate(labeled(txt, "End ?date"))
+    if not start:
+        start = isodate(safe(race.startdate))
+    if not end:
+        end = isodate(safe(race.enddate))
+    return start, end or start
+
+DEBUG = os.environ.get("PCS_DEBUG") == "1"
+DEBUG_DIR = os.path.join(os.path.dirname(os.path.abspath(OUT)), "debug")
+_saved = set()
+def save_debug(name, obj, why=""):
+    """Keep a trimmed copy of a page so a layout change can be diagnosed from the repo."""
+    if (not DEBUG and not why) or len(_saved) >= 10 or name in _saved:
+        return
+    try:
+        raw = obj.html.html if hasattr(obj.html, "html") else str(obj.html)
+        raw = re.sub(r"(?is)<(script|style|svg|noscript)\b.*?</\1>", "", raw)
+        os.makedirs(DEBUG_DIR, exist_ok=True)
+        with open(os.path.join(DEBUG_DIR, re.sub(r"[^a-z0-9-]+", "_", name.lower()) + ".html"), "w") as f:
+            f.write(f"<!-- {why} -->\n" + raw[:400000])
+        _saved.add(name)
+    except Exception as e:
+        log("debug save failed", name, e)
+
 def load_meta(P, r, year, ed, errors):
     """Race dates and stage list (refreshed daily, more often near the race)."""
     near = ed.get("start") and -3 <= (d(ed["start"]) - today_utc()).days <= 3
@@ -224,15 +289,24 @@ def load_meta(P, r, year, ed, errors):
     try:
         race = fetch(P.Race, race_url(r, year))
     except Exception as e:
-        if "not found" in str(e).lower() or isinstance(e, ValueError):
+        if "not found" in str(e).lower() or "invalid" in str(e).lower():
             ed["missing"] = True          # next year's edition often isn't posted yet: not an error
             ed["metaAt"] = iso_now()
             return ed
-        errors.append({"race": r["name"], "year": year, "what": "dates", "msg": str(e)[:200]})
+        errors.append({"race": r["name"], "year": year, "what": "dates", "msg": f"{type(e).__name__}: {e}"[:200]})
         return ed
+    start, end = race_dates(race)
+    if not start or not start.startswith(str(year)):
+        # PCS sometimes shows the latest edition for a year that isn't posted yet
+        if start and not start.startswith(str(year)):
+            ed["missing"] = True; ed["metaAt"] = iso_now(); ed.pop("start", None)
+            return ed
+        errors.append({"race": r["name"], "year": year, "what": "dates", "msg": "Couldn't find the race dates on the page"})
+        save_debug(f"{r['slug']}-{year}-race", race, "no dates found")
+        return ed
+    save_debug(f"{r['slug']}-{year}-race", race)
     ed.pop("missing", None)
-    ed["start"] = safe(race.startdate) or ed.get("start")
-    ed["end"] = safe(race.enddate) or ed.get("start")
+    ed["start"], ed["end"] = start, end
     ed["url"] = pcs_link(race_url(r, year))
     if r["kind"] != "one":
         stages = safe(race.stages, "date", "stage_name", "stage_url", "profile_icon", default=[]) or []
@@ -247,7 +321,10 @@ def load_meta(P, r, year, ed, errors):
             rec.update({"n": i, "label": f"Stage {n.group(1)}" if n else name.split("|")[0].strip(),
                         "name": name, "date": day, "url": s.get("stage_url"), "profile": s.get("profile_icon") or rec.get("profile", "")})
             new.append(rec)
-        ed["stages"] = new
+        ed["stages"] = [s for s in new if isodate(s.get("date") or "")]
+        if not ed["stages"]:
+            errors.append({"race": r["name"], "year": year, "what": "stages", "msg": "Couldn't read the stage list"})
+            save_debug(f"{r['slug']}-{year}-race", race, "no stages found")
     ed["metaAt"] = iso_now()
     return ed
 
@@ -275,6 +352,7 @@ def refresh_stage_race(P, r, year, ed, errors):
     def take(s, st):
         s.update(stage_details(st, s["date"]))
         res = table(safe(st.results, "rider_name", "team_name", "nationality", "rank", "time", default=[]))
+        save_debug(f"{r['slug']}-{year}-{s['label']}", st, "" if res or d(s["date"]) >= today else "stage ran but no results read")
         if res:
             s["result"] = res
             s["final"] = d(s["date"]) < today
@@ -317,10 +395,13 @@ def refresh_one_day(P, r, year, ed, errors, details_only=False):
     except Exception as e:
         errors.append({"race": r["name"], "year": year, "what": "details" if details_only else "result", "msg": str(e)[:200]}); return
     ed["details"] = stage_details(st, ed.get("start")); ed["detailAt"] = iso_now()
+    save_debug(f"{r['slug']}-{year}-result", st)
     if details_only:
         return
     res = table(safe(st.results, "rider_name", "team_name", "nationality", "rank", "time", default=[]),
                 worlds=r["cat"] == "Worlds")
+    if not res and d(ed["end"]) < today_utc():
+        save_debug(f"{r['slug']}-{year}-result", st, "race ran but no results read")
     if res:
         ed["result"] = res
         if d(ed["end"]) < today_utc():
@@ -333,6 +414,11 @@ def update(state):
     errors = []
     today = today_utc()
     races = {x["key"]: x for x in state.get("races", [])}
+    for x in races.values():                       # throw away anything that isn't a real date
+        for ed in x.get("editions", {}).values():
+            if ed.get("start") and not isodate(ed["start"]) or ed.get("end") and not isodate(ed["end"]):
+                for k in ("start", "end", "metaAt", "stages", "final"):
+                    ed.pop(k, None)
     out = []
     for r in RACES:
         cur = races.get(r["key"], {})
@@ -371,6 +457,32 @@ def update(state):
         out.append(rec)
     return {"races": out, "errors": errors}
 
+def debug_samples():
+    """On manual runs: what the library reads from a few known pages, for diagnosis."""
+    P = pcs(); out = {}
+    y = today_utc().year
+    for kind, url in [("Race", f"race/tour-de-france/{y}"), ("Race", f"race/dauphine/{y}"),
+                      ("Race", f"race/tour-auvergne-rhone-alpes/{y}"), ("Stage", f"race/tour-de-france/{y}/stage-21"),
+                      ("Stage", f"race/il-lombardia/{y}/result"), ("Race", f"{CX}race/world-championship-cx/{y}")]:
+        rec = {}
+        try:
+            obj = fetch(getattr(P, kind), url)
+        except Exception as e:
+            out[url] = {"error": f"{type(e).__name__}: {e}"[:300]}; continue
+        for m in (["startdate", "enddate", "name"] if kind == "Race" else ["date", "distance", "start_time", "profile_icon", "stage_type", "departure", "arrival"]):
+            try: rec[m] = getattr(obj, m)()
+            except Exception as e: rec[m] = f"ERR {type(e).__name__}: {e}"[:200]
+        for m in (["stages"] if kind == "Race" else ["results", "gc", "points", "kom", "youth", "teams"]):
+            try:
+                v = getattr(obj, m)(); rec[m] = {"count": len(v), "first": v[:2]}
+            except Exception as e: rec[m] = f"ERR {type(e).__name__}: {e}"[:200]
+        rec["labeledDates"] = race_dates(obj) if kind == "Race" else None
+        out[url] = rec
+        save_debug(url.replace(CX, "cx-"), obj, "sample")
+    os.makedirs(DEBUG_DIR, exist_ok=True)
+    with open(os.path.join(DEBUG_DIR, "summary.json"), "w") as f:
+        json.dump(out, f, indent=1, ensure_ascii=False, default=str)
+
 def fingerprint(obj):
     def strip(o):
         if isinstance(o, dict):
@@ -387,6 +499,8 @@ def main():
     except Exception:
         state = {}
     before = fingerprint({"races": state.get("races", []), "errors": state.get("errors", [])})
+    if DEBUG:
+        debug_samples()
     new = update(json.loads(json.dumps(state)))     # work on a copy so `before` stays honest
     changed = fingerprint(new) != before
     # GitHub turns off scheduled jobs in repos with no commits for 60 days, so
