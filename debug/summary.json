@@ -1,0 +1,116 @@
+{
+ "race/tour-de-france/2026": {
+  "startdate": "Instagram",
+  "enddate": "Instagram",
+  "name": "2026   »    113th Tour de France (2.UWT)",
+  "stages": {
+   "count": 0,
+   "first": []
+  },
+  "labeledDates": [
+   "2026-07-26",
+   "2026-07-26"
+  ]
+ },
+ "race/dauphine/2026": {
+  "startdate": "ERR AttributeError: 'NoneType' object has no attribute 'text'",
+  "enddate": "ERR IndexError: list index out of range",
+  "name": "ERR ExpectedParsingError: Title not found",
+  "stages": {
+   "count": 0,
+   "first": []
+  },
+  "labeledDates": [
+   null,
+   null
+  ]
+ },
+ "race/tour-auvergne-rhone-alpes/2026": {
+  "startdate": "Instagram",
+  "enddate": "Site",
+  "name": "2026   »    78th Tour Auvergne - Rhône-Alpes (2.UWT)",
+  "stages": {
+   "count": 0,
+   "first": []
+  },
+  "labeledDates": [
+   "2026-06-14",
+   "2026-06-14"
+  ]
+ },
+ "race/tour-de-france/2026/stage-21": {
+  "date": "ERR AttributeError: 'NoneType' object has no attribute 'css'",
+  "distance": "ERR AttributeError: 'NoneType' object has no attribute 'css'",
+  "start_time": "ERR AttributeError: 'NoneType' object has no attribute 'css'",
+  "profile_icon": "p1",
+  "stage_type": "RR",
+  "departure": "ERR AttributeError: 'NoneType' object has no attribute 'css'",
+  "arrival": "ERR AttributeError: 'NoneType' object has no attribute 'css'",
+  "results": "ERR ExpectedParsingError: Results table not in page HTML",
+  "gc": {
+   "count": 0,
+   "first": []
+  },
+  "points": {
+   "count": 0,
+   "first": []
+  },
+  "kom": {
+   "count": 0,
+   "first": []
+  },
+  "youth": {
+   "count": 0,
+   "first": []
+  },
+  "teams": {
+   "count": 0,
+   "first": []
+  },
+  "labeledDates": null
+ },
+ "race/il-lombardia/2026/result": {
+  "date": "ERR AttributeError: 'NoneType' object has no attribute 'css'",
+  "distance": "ERR AttributeError: 'NoneType' object has no attribute 'css'",
+  "start_time": "ERR AttributeError: 'NoneType' object has no attribute 'css'",
+  "profile_icon": "p2",
+  "stage_type": "RR",
+  "departure": "ERR AttributeError: 'NoneType' object has no attribute 'css'",
+  "arrival": "ERR AttributeError: 'NoneType' object has no attribute 'css'",
+  "results": "ERR ExpectedParsingError: Results table not in page HTML",
+  "gc": {
+   "count": 0,
+   "first": []
+  },
+  "points": {
+   "count": 0,
+   "first": []
+  },
+  "kom": {
+   "count": 0,
+   "first": []
+  },
+  "youth": {
+   "count": 0,
+   "first": []
+  },
+  "teams": {
+   "count": 0,
+   "first": []
+  },
+  "labeledDates": null
+ },
+ "https://cx.procyclingstats.com/race/world-championship-cx/2026": {
+  "startdate": "ERR AttributeError: 'NoneType' object has no attribute 'text'",
+  "enddate": "ERR IndexError: list index out of range",
+  "name": "ERR ExpectedParsingError: Title not found",
+  "stages": {
+   "count": 0,
+   "first": []
+  },
+  "labeledDates": [
+   null,
+   null
+  ]
+ }
+}
