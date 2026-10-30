@@ -457,31 +457,38 @@ def update(state):
         out.append(rec)
     return {"races": out, "errors": errors}
 
-def debug_samples():
-    """On manual runs: what the library reads from a few known pages, for diagnosis."""
-    P = pcs(); out = {}
-    y = today_utc().year
-    for kind, url in [("Race", f"race/tour-de-france/{y}"), ("Race", f"race/dauphine/{y}"),
-                      ("Race", f"race/tour-auvergne-rhone-alpes/{y}"), ("Stage", f"race/tour-de-france/{y}/stage-21"),
-                      ("Stage", f"race/il-lombardia/{y}/result"), ("Race", f"{CX}race/world-championship-cx/{y}")]:
-        rec = {}
+def probe():
+    """Manual runs: save full copies of pages needed to adapt to PCS's 2026 redesign."""
+    import cloudscraper
+    W = "https://www.procyclingstats.com/"
+    urls = [W + "races.php?year=2027&circuit=1&filter=Filter", W + "races.php?year=2026&circuit=1&filter=Filter",
+            W + "race/tour-de-france-2026-gc/info", W + "race/tour-de-france-2026-gc/stages",
+            W + "race/tour-de-france-2027-gc/info", W + "race/tour-de-france-2027-gc/stages",
+            W + "race/tour-de-france-2026-stage-21", W + "race/paris-nice-2027-gc/info",
+            W + "race/strade-bianche-2027-result", W + "race/il-lombardia-2026",
+            W + "race/world-championship-2026-result", W + "race/world-championship/2026", W + "race/world-championship-itt/2026",
+            W + "race/tour-auvergne-rhone-alpes/2027", CX + "race/world-championship-cx/2026", CX + "race/world-championship-cx-2026-result",
+            CX + "race/world-championship-cx/2026/me", CX + "races.php"]
+    s = cloudscraper.create_scraper(browser={"browser": "chrome", "platform": "windows", "desktop": True})
+    d_ = os.path.join(DEBUG_DIR, "probe"); os.makedirs(d_, exist_ok=True)
+    summary = {}
+    for u in urls:
+        time.sleep(PAUSE)
         try:
-            obj = fetch(getattr(P, kind), url)
+            r = s.get(u, timeout=40)
+            html = re.sub(r"(?is)<(script|style|svg|noscript)\b.*?</\1>", "", r.text)
+            name = re.sub(r"[^a-z0-9]+", "_", u.split("://", 1)[1].lower()).strip("_")[:90]
+            with open(os.path.join(d_, name + ".html"), "w") as f:
+                f.write(html[:3_000_000])
+            can = re.search(r'rel="canonical" href="([^"]+)"', html)
+            title = re.search(r"<title>(.*?)</title>", html, re.S)
+            summary[u] = {"status": r.status_code, "final": r.url, "canonical": can and can.group(1),
+                          "title": title and title.group(1).strip(), "bytes": len(html), "file": name + ".html"}
         except Exception as e:
-            out[url] = {"error": f"{type(e).__name__}: {e}"[:300]}; continue
-        for m in (["startdate", "enddate", "name"] if kind == "Race" else ["date", "distance", "start_time", "profile_icon", "stage_type", "departure", "arrival"]):
-            try: rec[m] = getattr(obj, m)()
-            except Exception as e: rec[m] = f"ERR {type(e).__name__}: {e}"[:200]
-        for m in (["stages"] if kind == "Race" else ["results", "gc", "points", "kom", "youth", "teams"]):
-            try:
-                v = getattr(obj, m)(); rec[m] = {"count": len(v), "first": v[:2]}
-            except Exception as e: rec[m] = f"ERR {type(e).__name__}: {e}"[:200]
-        rec["labeledDates"] = race_dates(obj) if kind == "Race" else None
-        out[url] = rec
-        save_debug(url.replace(CX, "cx-"), obj, "sample")
-    os.makedirs(DEBUG_DIR, exist_ok=True)
-    with open(os.path.join(DEBUG_DIR, "summary.json"), "w") as f:
-        json.dump(out, f, indent=1, ensure_ascii=False, default=str)
+            summary[u] = {"error": f"{type(e).__name__}: {e}"[:300]}
+        log(u, summary[u].get("status"), summary[u].get("bytes"))
+    with open(os.path.join(d_, "summary.json"), "w") as f:
+        json.dump(summary, f, indent=1, ensure_ascii=False)
 
 def fingerprint(obj):
     def strip(o):
@@ -500,7 +507,8 @@ def main():
         state = {}
     before = fingerprint({"races": state.get("races", []), "errors": state.get("errors", [])})
     if DEBUG:
-        debug_samples()
+        probe()
+        return                                      # diagnostic run only; leave cycling.json alone
     new = update(json.loads(json.dumps(state)))     # work on a copy so `before` stays honest
     changed = fingerprint(new) != before
     # GitHub turns off scheduled jobs in repos with no commits for 60 days, so
