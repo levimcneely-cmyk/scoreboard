@@ -1,0 +1,146 @@
+{
+ "https://www.procyclingstats.com/races.php?year=2027&circuit=1&filter=Filter": {
+  "status": 200,
+  "final": "https://www.procyclingstats.com/races.php?year=2027&circuit=1&filter=Filter",
+  "canonical": "https://www.procyclingstats.com/calendar/uci/year-calendar",
+  "title": "UCI Cycling calendar 2027",
+  "bytes": 30303,
+  "file": "www_procyclingstats_com_races_php_year_2027_circuit_1_filter_filter.html"
+ },
+ "https://www.procyclingstats.com/races.php?year=2026&circuit=1&filter=Filter": {
+  "status": 200,
+  "final": "https://www.procyclingstats.com/races.php?year=2026&circuit=1&filter=Filter",
+  "canonical": "https://www.procyclingstats.com/calendar/uci/year-calendar",
+  "title": "UCI Cycling calendar 2026",
+  "bytes": 33023,
+  "file": "www_procyclingstats_com_races_php_year_2026_circuit_1_filter_filter.html"
+ },
+ "https://www.procyclingstats.com/race/tour-de-france-2026-gc/info": {
+  "status": 200,
+  "final": "https://www.procyclingstats.com/race/tour-de-france-2026-gc/info",
+  "canonical": "https://www.procyclingstats.com/race/tour-de-france-2026-gc/info/complementary-results",
+  "title": "Complementary results on Tour de France Stage 21",
+  "bytes": 46341,
+  "file": "www_procyclingstats_com_race_tour_de_france_2026_gc_info.html"
+ },
+ "https://www.procyclingstats.com/race/tour-de-france-2026-gc/stages": {
+  "status": 200,
+  "final": "https://www.procyclingstats.com/race/tour-de-france-2026-gc/stages",
+  "canonical": "https://www.procyclingstats.com/race///results",
+  "title": "Tour de France 2026 | Stage winners and leaders",
+  "bytes": 47600,
+  "file": "www_procyclingstats_com_race_tour_de_france_2026_gc_stages.html"
+ },
+ "https://www.procyclingstats.com/race/tour-de-france-2027-gc/info": {
+  "status": 200,
+  "final": "https://www.procyclingstats.com/race/tour-de-france-2027-gc/info",
+  "canonical": "https://www.procyclingstats.com/race/tour-de-france-2027-gc/info/complementary-results",
+  "title": "Complementary results on Tour de France Stage 21",
+  "bytes": 28430,
+  "file": "www_procyclingstats_com_race_tour_de_france_2027_gc_info.html"
+ },
+ "https://www.procyclingstats.com/race/tour-de-france-2027-gc/stages": {
+  "status": 200,
+  "final": "https://www.procyclingstats.com/race/tour-de-france-2027-gc/stages",
+  "canonical": "https://www.procyclingstats.com/race///results",
+  "title": "Tour de France 2027 | Stage winners and leaders",
+  "bytes": 40928,
+  "file": "www_procyclingstats_com_race_tour_de_france_2027_gc_stages.html"
+ },
+ "https://www.procyclingstats.com/race/tour-de-france-2026-stage-21": {
+  "status": 200,
+  "final": "https://www.procyclingstats.com/race/tour-de-france-2026-stage-21",
+  "canonical": "https://www.procyclingstats.com/race/tour-de-france-2026-stage-21/results/results",
+  "title": "Tour de France 2026 Stage 21 results",
+  "bytes": 654893,
+  "file": "www_procyclingstats_com_race_tour_de_france_2026_stage_21.html"
+ },
+ "https://www.procyclingstats.com/race/paris-nice-2027-gc/info": {
+  "status": 200,
+  "final": "https://www.procyclingstats.com/race/paris-nice-2027-gc/info",
+  "canonical": "https://www.procyclingstats.com/race/paris-nice-2027-gc/info/complementary-results",
+  "title": "Complementary results on Paris-Nice Stage 8",
+  "bytes": 23638,
+  "file": "www_procyclingstats_com_race_paris_nice_2027_gc_info.html"
+ },
+ "https://www.procyclingstats.com/race/strade-bianche-2027-result": {
+  "status": 200,
+  "final": "https://www.procyclingstats.com/race/strade-bianche-2027-result",
+  "canonical": "https://www.procyclingstats.com/race/strade-bianche-2027-result/results/results",
+  "title": "Strade Bianche 2027 One day race results",
+  "bytes": 23497,
+  "file": "www_procyclingstats_com_race_strade_bianche_2027_result.html"
+ },
+ "https://www.procyclingstats.com/race/il-lombardia-2026": {
+  "status": 200,
+  "final": "https://www.procyclingstats.com/race/il-lombardia-2026",
+  "canonical": "https://www.procyclingstats.com//main/start",
+  "title": "Page not found",
+  "bytes": 10754,
+  "file": "www_procyclingstats_com_race_il_lombardia_2026.html"
+ },
+ "https://www.procyclingstats.com/race/world-championship-2026-result": {
+  "status": 200,
+  "final": "https://www.procyclingstats.com/race/world-championship-2026-result",
+  "canonical": "https://www.procyclingstats.com/race/world-championship-2026-result/results/results",
+  "title": "World Championships ME - Road Race 2026 One day race results",
+  "bytes": 196465,
+  "file": "www_procyclingstats_com_race_world_championship_2026_result.html"
+ },
+ "https://www.procyclingstats.com/race/world-championship/2026": {
+  "status": 200,
+  "final": "https://www.procyclingstats.com/race/world-championship/2026",
+  "canonical": "https://www.procyclingstats.com/race/world-championship-2026-result/results/results",
+  "title": "World Championships ME - Road Race 2026 One day race results",
+  "bytes": 196465,
+  "file": "www_procyclingstats_com_race_world_championship_2026.html"
+ },
+ "https://www.procyclingstats.com/race/world-championship-itt/2026": {
+  "status": 200,
+  "final": "https://www.procyclingstats.com/race/world-championship-itt/2026",
+  "canonical": "https://www.procyclingstats.com/race/world-championship-itt-2026-result/results/results",
+  "title": "World Championships ME - ITT 2026 Time Trial results",
+  "bytes": 143913,
+  "file": "www_procyclingstats_com_race_world_championship_itt_2026.html"
+ },
+ "https://www.procyclingstats.com/race/tour-auvergne-rhone-alpes/2027": {
+  "status": 200,
+  "final": "https://www.procyclingstats.com/race/tour-auvergne-rhone-alpes/2027",
+  "canonical": "https://www.procyclingstats.com/race/tour-auvergne-rhone-alpes-2027-gc/results/results",
+  "title": "Tour Auvergne - Rhône-Alpes 2027 Stage 8 results",
+  "bytes": 31968,
+  "file": "www_procyclingstats_com_race_tour_auvergne_rhone_alpes_2027.html"
+ },
+ "https://cx.procyclingstats.com/race/world-championship-cx/2026": {
+  "status": 200,
+  "final": "https://cx.procyclingstats.com/race/world-championship-cx/2026",
+  "canonical": "https://cx.procyclingstats.com/",
+  "title": "",
+  "bytes": 6424,
+  "file": "cx_procyclingstats_com_race_world_championship_cx_2026.html"
+ },
+ "https://cx.procyclingstats.com/race/world-championship-cx-2026-result": {
+  "status": 200,
+  "final": "https://cx.procyclingstats.com/race/world-championship-cx-2026-result",
+  "canonical": "https://cx.procyclingstats.com/",
+  "title": "",
+  "bytes": 6424,
+  "file": "cx_procyclingstats_com_race_world_championship_cx_2026_result.html"
+ },
+ "https://cx.procyclingstats.com/race/world-championship-cx/2026/me": {
+  "status": 200,
+  "final": "https://cx.procyclingstats.com/race/world-championship-cx/2026/me",
+  "canonical": "https://cx.procyclingstats.com/",
+  "title": "",
+  "bytes": 6424,
+  "file": "cx_procyclingstats_com_race_world_championship_cx_2026_me.html"
+ },
+ "https://cx.procyclingstats.com/races.php": {
+  "status": 200,
+  "final": "https://cx.procyclingstats.com/races.php",
+  "canonical": "https://cx.procyclingstats.com/calendar/livestats-calendar",
+  "title": "Program",
+  "bytes": 6744,
+  "file": "cx_procyclingstats_com_races_php.html"
+ }
+}
