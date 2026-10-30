@@ -461,14 +461,8 @@ def probe():
     """Manual runs: save full copies of pages needed to adapt to PCS's 2026 redesign."""
     import cloudscraper
     W = "https://www.procyclingstats.com/"
-    urls = [W + "races.php?year=2027&circuit=1&filter=Filter", W + "races.php?year=2026&circuit=1&filter=Filter",
-            W + "race/tour-de-france-2026-gc/info", W + "race/tour-de-france-2026-gc/stages",
-            W + "race/tour-de-france-2027-gc/info", W + "race/tour-de-france-2027-gc/stages",
-            W + "race/tour-de-france-2026-stage-21", W + "race/paris-nice-2027-gc/info",
-            W + "race/strade-bianche-2027-result", W + "race/il-lombardia-2026",
-            W + "race/world-championship-2026-result", W + "race/world-championship/2026", W + "race/world-championship-itt/2026",
-            W + "race/tour-auvergne-rhone-alpes/2027", CX + "race/world-championship-cx/2026", CX + "race/world-championship-cx-2026-result",
-            CX + "race/world-championship-cx/2026/me", CX + "races.php"]
+    urls = [CX + "race/world-championship-cx", CX + "race/world-championship-cx/results", CX + "race/world-championship-cx/2027",
+            CX + "race/world-championship-cx-2026", CX + "race/world-championship-cx-2027"]
     s = cloudscraper.create_scraper(browser={"browser": "chrome", "platform": "windows", "desktop": True})
     d_ = os.path.join(DEBUG_DIR, "probe"); os.makedirs(d_, exist_ok=True)
     summary = {}
