@@ -3,7 +3,7 @@ name: Update cycling results
 on:
   schedule:
     - cron: "*/30 * * * *"     # every 30 minutes; the script skips work when nothing is racing
-  workflow_dispatch: {}         # "Run workflow" button; manual runs also save sample pages to debug/
+  workflow_dispatch: {}         # adds a "Run workflow" button for a manual refresh
 
 permissions:
   contents: write
@@ -23,18 +23,15 @@ jobs:
         with:
           python-version: "3.12"
 
-      # selectolax must stay below 1.0: newer versions break the procyclingstats library
       - name: Install
-        run: pip install "procyclingstats==0.2.8" "selectolax<1.0" cloudscraper
+        run: pip install "selectolax>=0.3.21" cloudscraper requests
 
       - name: Fetch results
-        env:
-          PCS_DEBUG: ${{ github.event_name == 'workflow_dispatch' && '1' || '' }}
         run: python scripts/cycling.py
 
       - name: Save if changed
         run: |
-          git add -A cycling.json debug 2>/dev/null || git add cycling.json
+          git add -A cycling.json debug 2>/dev/null || git add cycling.json   # debug/ only holds pages that failed to read
           if ! git diff --cached --quiet; then
             git config user.name "cycling-bot"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"

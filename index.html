@@ -799,6 +799,8 @@ function cycHighlights(t, worlds){
   if(!t) return '';
   const top = new Set((t.top || []).map(p => p.rank));
   const f = (who, p) => p && !top.has(p.rank) ? `${who}: ${p.name}, ${ordinal(p.rank)}${p.time && p.time !== 's.t.' && !/^\d+:\d\d:\d\d$/.test(p.time) ? ` (${p.time})` : p.pts != null ? ` (${p.pts} pts)` : ''}` : '';
+  const same = !worlds && t.visma && t.usa && t.visma.rank === t.usa.rank;
+  if(same) return f('Visma and top American', t.visma);
   const us = t.usa ? (worlds && t.usaCount > 1 ? f(`Top American (${t.usaCount} finished)`, t.usa) || `${t.usaCount} Americans finished` : f('Top American', t.usa)) : '';
   return [worlds ? '' : f('Visma', t.visma), us].filter(Boolean).join('. ');
 }
