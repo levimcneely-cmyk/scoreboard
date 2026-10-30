@@ -607,15 +607,15 @@ def wiki(r, year, ed, errors):
                 flag = td.css_first("span.flagicon a")
                 ioc = re.search(r"\b(USA|NED|BEL|GBR|FRA)\b", txt)
                 nat = COUNTRY.get(flag.attributes.get("title", "") if flag else "", "") or {"USA": "US"}.get(ioc.group(1) if ioc else "", "")
+                if not nat and re.search(r'United States|\(USA\)|\bUSA\b', td.html or ""):
+                    nat = "US"
                 top.append({"rank": len(top) + 1, "name": people[0].text(strip=True), "team": "", "nat": nat, "time": ""})
             if tm:
                 times.append(":".join(x for x in tm.groups() if x))
             if len(top) == 3:
                 break
-        if top and times:
-            top[0]["time"] = times[0]
-        break
-    ed["src"] = "wiki2"
+        break                                         # medal tables don't give reliable times, so none are shown
+    ed["src"] = "wiki3"
     if len(top) == 3 and all(p["name"] and not re.search(r"\d", p["name"]) for p in top):
         res = {"top": top}
         us = [p for p in top if p["nat"] == "US"]
@@ -644,7 +644,7 @@ def update(state):
                 eds[y] = {}
         if r.get("wiki"):
             for y, e in list(eds.items()):
-                if e.get("start") and e.get("src") != "wiki2":
+                if e.get("start") and e.get("src") != "wiki3":
                     eds[y] = {}
         rec["editions"] = eds
         for year in sorted(years):
