@@ -128,7 +128,7 @@ def get(url):
 
 def is_page_for(page, slug, year):
     """PCS sends unknown addresses to a related page; make sure we got the right edition."""
-    return f"{slug}-{year}" in (page.canonical or "") + " " + (page.final or "")
+    return f"{slug}-{year}" in (page.canonical or "")          # unknown editions get the home page
 
 DEBUG = os.environ.get("PCS_DEBUG") == "1"
 DEBUG_DIR = os.path.join(os.path.dirname(os.path.abspath(OUT)), "debug")
@@ -595,17 +595,28 @@ def wiki(r, year, ed, errors):
     top = []
     for tr in doc.css("table.wikitable tr"):
         cells = tr.css("td, th")
-        if not cells or not re.search(r"(men'?s elite|elite men)", cells[0].text(strip=True), re.I):
+        if not cells or not re.match(r"\s*(men'?s\s+elite|elite\s+men)\b", cells[0].text(strip=True), re.I):
             continue
-        for rank, td in enumerate(cells[1:4], 1):
-            a = [x for x in td.css("a") if not x.css_first("img")]
-            name = a[0].text(strip=True) if a else td.text(strip=True)
-            flag = td.css_first("span.flagicon a") or td.css_first("a[title]")
-            nat = COUNTRY.get(flag.attributes.get("title", "") if flag else "", "")
-            tm = re.search(r"\d+:\d{2}(:\d{2})?", td.text(strip=True))
-            top.append({"rank": rank, "name": name, "team": "", "nat": nat, "time": tm.group(0) if tm and rank == 1 else ""})
+        times = []
+        for td in cells[1:]:
+            txt = td.text(separator=" ", strip=True)
+            people = [a for a in td.css('a[href^="/wiki/"]') if not a.css_first("img") and not a.parent.attributes.get("class", "").startswith("flagicon")
+                      and a.text(strip=True) and a.attributes.get("title", "") not in COUNTRY]
+            tm = re.search(r"(\d+)\s*['′:]\s*(\d{2})(?:\s*[\"″:]\s*(\d{2})?)?", txt)
+            if people:
+                flag = td.css_first("span.flagicon a")
+                ioc = re.search(r"\b(USA|NED|BEL|GBR|FRA)\b", txt)
+                nat = COUNTRY.get(flag.attributes.get("title", "") if flag else "", "") or {"USA": "US"}.get(ioc.group(1) if ioc else "", "")
+                top.append({"rank": len(top) + 1, "name": people[0].text(strip=True), "team": "", "nat": nat, "time": ""})
+            if tm:
+                times.append(":".join(x for x in tm.groups() if x))
+            if len(top) == 3:
+                break
+        if top and times:
+            top[0]["time"] = times[0]
         break
-    if top and all(p["name"] for p in top):
+    ed["src"] = "wiki2"
+    if len(top) == 3 and all(p["name"] and not re.search(r"\d", p["name"]) for p in top):
         res = {"top": top}
         us = [p for p in top if p["nat"] == "US"]
         if us:
@@ -614,7 +625,7 @@ def wiki(r, year, ed, errors):
         if d(day) < today_utc():
             ed["final"] = True
     elif d(day) < today_utc():
-        save_debug(f"wiki-cx-{year}", page, "race ran but no medal table read")
+        save_debug(f"wiki-cx-{year}", page, "race ran but no men's elite result read")
 
 # ---------------------------------------------------------------------------
 def update(state):
@@ -631,6 +642,10 @@ def update(state):
         for y, e in list(eds.items()):
             if (e.get("start") and not isodate(e["start"])) or (e.get("stages") and "/" in (e["stages"][0].get("url") or "/")):
                 eds[y] = {}
+        if r.get("wiki"):
+            for y, e in list(eds.items()):
+                if e.get("start") and e.get("src") != "wiki2":
+                    eds[y] = {}
         rec["editions"] = eds
         for year in sorted(years):
             ed = eds.setdefault(str(year), {})
