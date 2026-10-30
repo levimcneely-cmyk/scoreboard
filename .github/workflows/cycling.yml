@@ -3,7 +3,7 @@ name: Update cycling results
 on:
   schedule:
     - cron: "*/30 * * * *"     # every 30 minutes; the script skips work when nothing is racing
-  workflow_dispatch: {}         # adds a "Run workflow" button for a manual refresh
+  workflow_dispatch: {}         # "Run workflow" button; manual runs also save sample pages to debug/
 
 permissions:
   contents: write
@@ -17,9 +17,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
@@ -28,14 +28,16 @@ jobs:
         run: pip install "procyclingstats==0.2.8" "selectolax<1.0" cloudscraper
 
       - name: Fetch results
+        env:
+          PCS_DEBUG: ${{ github.event_name == 'workflow_dispatch' && '1' || '' }}
         run: python scripts/cycling.py
 
       - name: Save if changed
         run: |
-          if [ -n "$(git status --porcelain cycling.json)" ]; then
+          git add -A cycling.json debug 2>/dev/null || git add cycling.json
+          if ! git diff --cached --quiet; then
             git config user.name "cycling-bot"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add cycling.json
             git commit -m "Update cycling results"
             git pull --rebase --autostash
             git push
