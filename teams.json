@@ -1,0 +1,19 @@
+[
+  {"group": "mine", "kind": "team", "sport": "football", "league": "nfl", "id": 18, "label": "Saints", "abbr": "NOLA", "notify": true},
+  {"group": "mine", "kind": "team", "sport": "football", "league": "college-football", "id": 2509, "label": "Purdue Football", "abbr": "PUFB", "notify": true},
+  {"group": "mine", "kind": "team", "sport": "basketball", "league": "mens-college-basketball", "id": 2509, "label": "Purdue Basketball", "abbr": "PUBB", "notify": true},
+  {"group": "mine", "kind": "team", "sport": "baseball", "league": "mlb", "id": 30, "label": "Rays", "abbr": "RAYS", "notify": true},
+  {"group": "mine", "kind": "team", "sport": "soccer", "leagues": ["eng.2", "eng.1", "eng.3"], "id": 352, "label": "Wrexham", "abbr": "WREX", "notify": true},
+  {"group": "mine", "kind": "team", "sport": "soccer", "leagues": ["eng.1"], "id": 359, "label": "Arsenal", "abbr": "ARSL", "notify": true},
+  {"group": "mine", "kind": "indycar", "label": "Chip Ganassi Racing", "abbr": "CGR", "mono": "CGR", "color": "#C8102E", "drivers": ["Palou", "Dixon", "Simpson"], "notify": true},
+  {"group": "mine", "kind": "f1", "label": "Red Bull Racing", "abbr": "RBR", "mono": "RBR", "color": "#1E3A8A", "constructorId": "red_bull", "notify": true},
+  {"group": "mine", "kind": "team", "sport": "basketball", "league": "nba", "id": 11, "label": "Pacers", "abbr": "PCRS", "notify": true},
+  {"group": "mine", "kind": "cycling", "label": "Pro Cycling", "abbr": "CYCL", "mono": "CYCL", "color": "#FFD200", "notify": true},
+  {"group": "family", "kind": "team", "sport": "football", "league": "college-football", "id": 84, "label": "IU Football", "abbr": "IUFB", "notify": false},
+  {"group": "family", "kind": "team", "sport": "basketball", "league": "mens-college-basketball", "id": 84, "label": "IU Basketball", "abbr": "IUBB", "notify": false},
+  {"group": "family", "kind": "team", "sport": "football", "league": "nfl", "id": 11, "label": "Colts", "abbr": "INDC", "notify": false},
+  {"group": "family", "kind": "team", "sport": "baseball", "league": "mlb", "id": 8, "label": "Brewers", "abbr": "BREW", "notify": false},
+  {"group": "family", "kind": "team", "sport": "baseball", "league": "mlb", "id": 17, "label": "Reds", "abbr": "REDS", "notify": false},
+  {"group": "family", "kind": "team", "sport": "baseball", "league": "mlb", "id": 14, "label": "Blue Jays", "abbr": "JAYS", "notify": false},
+  {"group": "family", "kind": "golf", "label": "PGA Tour", "abbr": "PGA", "mono": "PGA", "color": "#0B3D6E", "notify": false}
+]

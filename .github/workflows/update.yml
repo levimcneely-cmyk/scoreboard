@@ -1,0 +1,40 @@
+name: Update scoreboard
+
+on:
+  schedule:
+    - cron: "7,37 * * * *"     # odd minutes: GitHub delays runs scheduled on the hour
+  workflow_dispatch: {}         # "Run workflow" button
+
+permissions:
+  contents: write
+
+concurrency:
+  group: scoreboard
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    env:
+      TZ: America/New_York      # times in notifications and saved labels
+      NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+      DATA_DIR: data
+      CYCLING_OUT: data/cycling.json
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+
+      - name: Install
+        run: pip install "selectolax>=0.3.21" cloudscraper requests
+
+      - name: Update and publish
+        run: bash scripts/run.sh
