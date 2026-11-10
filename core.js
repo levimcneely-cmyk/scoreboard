@@ -299,13 +299,23 @@ function infoFromStandings(cfg, st, events){
   };
 }
 
+// One ordering for both the rank chip and the standings table.
+// Soccer: the league's own position. Everyone else: winning percentage (conference record first in college).
+function rankedEntries(cfg, st, league){
+  const soccer = cfg.sport === 'soccer', college = /college/.test(league);
+  const pct = x => statVal(x,'winPercent') ?? recPct(statOf(x,'overall','total')?.displayValue) ?? 0;
+  const confPct = x => recPct(statOf(x,'vsConf','CONF','vsconf')?.displayValue);
+  return [...st.entries].sort((a,b) => {
+    if(soccer){ const ra = statVal(a,'rank'), rb = statVal(b,'rank'); return ra && rb ? ra - rb : (statVal(b,'points') ?? 0) - (statVal(a,'points') ?? 0); }
+    if(college){ const d = (confPct(b) ?? -1) - (confPct(a) ?? -1); if(d) return d; }
+    return pct(b) - pct(a) || (statVal(b,'wins') ?? 0) - (statVal(a,'wins') ?? 0);
+  });
+}
 // Standings rows for the expandable section: the team's division/conference, windowed if long
 function standingsTable(cfg, st, league){
   if(!st?.entries?.length) return null;
   const soccer = cfg.sport === 'soccer', college = /college/.test(league);
-  const key = x => soccer ? (statVal(x,'points') ?? 0)
-    : (college ? recPct(statOf(x,'vsConf','CONF','vsconf')?.displayValue) : null) ?? statVal(x,'winPercent') ?? recPct(statOf(x,'overall','total')?.displayValue) ?? 0;
-  const ranked = [...st.entries].sort((a,b) => (statVal(a,'rank') || 0) && (statVal(b,'rank') || 0) ? statVal(a,'rank') - statVal(b,'rank') : key(b) - key(a));
+  const ranked = rankedEntries(cfg, st, league);
   const at = ranked.findIndex(x => String(x.team?.id) === String(cfg.id));
   const lo = ranked.length > 8 ? Math.max(0, Math.min(at - 3, ranked.length - 7)) : 0;
   const third = soccer ? 'Pts' : college ? 'Conf' : (league === 'mlb' || league === 'nba') ? 'GB' : '';
@@ -341,6 +351,10 @@ async function loadTeam(cfg){
   // standings chips
   const chips = [];
   if(fb.apRank && fb.apRank <= 25) chips.push({ t:`#${fb.apRank} AP`, cls:'rank' });
+  if(st?.entries?.length){
+    const pos = rankedEntries(cfg, st, league).findIndex(x => String(x.team?.id) === String(cfg.id)) + 1;
+    if(pos > 0) fb.summary = `${ordinal(pos)} in ${shortGroup(st.group)}`;
+  }
   if(fb.summary) chips.push({ t:fb.summary });
   if(fb.conf && /college/.test(league)) chips.push({ t:`${fb.conf} conf` });
   const gb = parseFloat(fb.gb);

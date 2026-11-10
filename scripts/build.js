@@ -18,6 +18,7 @@ const ALERT_AFTER = 90 * 60e3;         // a team failing this long triggers an a
 
 globalThis.readLocalJSON = name => JSON.parse(fs.readFileSync(path.join(DATA, name), 'utf8'));
 vm.runInThisContext(fs.readFileSync(path.join(ROOT, 'core.js'), 'utf8'), { filename: 'core.js' });
+if (process.env.BUILD_HOOK) require(path.resolve(process.env.BUILD_HOOK));   // tests swap in fake loaders
 
 const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
 
@@ -77,7 +78,7 @@ async function main() {
     }
     const s = m.slate;
     if (s && !s.tbd && !s.live) {
-      const t = +new Date(s.date), id = `start:${key}:${t}`;
+      const t = +new Date(s.date), id = `start:${key}:${Math.round(t / 60e3)}`;
       if (t - now > 0 && t - now <= 25 * 60e3 && !seen[id]) {
         seen[id] = now;
         const what = s.what.startsWith(cfg.abbr) ? cfg.label + s.what.slice(cfg.abbr.length) : s.what;
