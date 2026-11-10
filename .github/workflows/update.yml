@@ -22,6 +22,7 @@ jobs:
       DATA_DIR: data
       CYCLING_OUT: data/cycling.json
       GH_TOKEN: ${{ github.token }}
+      FULL: ${{ github.event_name == 'workflow_dispatch' && '1' || '' }}   # manual runs rebuild every team
     steps:
       - uses: actions/checkout@v5
 

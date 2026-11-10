@@ -18,6 +18,7 @@ end=$((SECONDS + 5*3600 + 20*60))
 while :; do
   python scripts/cycling.py || echo "::warning::cycling update failed"
   node scripts/build.js; code=$?
+  export FULL=""            # only the first pass of a manual run rebuilds everything
   publish
   if [ "$code" -ne 10 ] || [ "$SECONDS" -ge "$end" ]; then break; fi
   echo "Something is live or starting soon; checking again in 5 minutes"

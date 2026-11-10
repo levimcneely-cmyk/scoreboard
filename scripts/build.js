@@ -4,6 +4,7 @@
 
   node scripts/build.js            DATA_DIR (default ./data) holds scores.json and cycling.json
   Env:  NTFY_TOPIC   ntfy.sh topic to notify (no notifications when empty)
+        FULL=1       rebuild every team now (manual runs do this)
         SITE_URL     link opened when a notification is tapped
   Exit: 0 = done, nothing live soon   10 = something is live or starting soon (keep polling)
 */
@@ -42,7 +43,7 @@ async function main() {
   const meta = Object.assign({ fullAt: 0, notified: {}, failing: {} }, prev.meta || {});
   const now = Date.now();
 
-  const full = !Object.keys(state).length || now - meta.fullAt > FULL_EVERY;
+  const full = process.env.FULL === '1' || !Object.keys(state).length || now - meta.fullAt > FULL_EVERY;
   const targets = TEAMS.filter(cfg => full || isHot(state[keyOf(cfg)], now));
   log(full ? 'full rebuild' : 'live update', '-', targets.map(c => c.abbr).join(' ') || 'nothing hot');
 
