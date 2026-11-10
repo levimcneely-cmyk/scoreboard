@@ -209,7 +209,7 @@ const statOf = (e, ...names) => (e?.stats || []).find(s => names.includes(s.name
 const statVal = (e, ...n) => { const s = statOf(e, ...n); return s ? (s.value ?? parseFloat(s.displayValue)) : null; };
 const recPct = r => { const m = String(r || '').match(/(\d+)-(\d+)(?:-(\d+))?/); if(!m) return null; const w=+m[1], l=+m[2], t=+(m[3]||0); return w+l+t ? (w + t/2) / (w+l+t) : 0; };
 function shortGroup(n){
-  return String(n || '').replace(/^American League/, 'AL').replace(/^National League/, 'NL')
+  return String(n || '').replace(/^\d{4}-\d{2,4}\s+/, '').replace(/^American League/, 'AL').replace(/^National League/, 'NL')
     .replace(/^English /, '').replace(/ Conference$/, '').replace(/ Division$/, '').trim();
 }
 async function standingsInfo(sport, league, id){
