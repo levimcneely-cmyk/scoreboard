@@ -44,7 +44,8 @@ async function main() {
   const now = Date.now();
 
   const full = process.env.FULL === '1' || !Object.keys(state).length || now - meta.fullAt > FULL_EVERY;
-  const targets = TEAMS.filter(cfg => full || isHot(state[keyOf(cfg)], now));
+  // cycling reads the local cycling.json (no network), so it's rebuilt every pass and its health is current
+  const targets = TEAMS.filter(cfg => full || cfg.kind === 'cycling' || isHot(state[keyOf(cfg)], now));
   log(full ? 'full rebuild' : 'live update', '-', targets.map(c => c.abbr).join(' ') || 'nothing hot');
 
   // a few at a time, so ESPN isn't hit with everything at once

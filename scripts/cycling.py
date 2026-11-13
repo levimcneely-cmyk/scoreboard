@@ -98,10 +98,16 @@ class Page:
         c = self.doc.css_first('link[rel="canonical"]')
         self.canonical = (c.attributes.get("href") if c else "") or final
 
+class Blocked(ConnectionError):
+    """PCS's bot protection turned us away; no point asking again this run."""
+
 _session = [None]
 _last_req = [0.0]
+_blocked = [None]
 def get(url):
     """Fetch a PCS page through Cloudflare. Returns a Page."""
+    if _blocked[0]:
+        raise Blocked(_blocked[0])
     if _session[0] is None:
         import cloudscraper
         _session[0] = cloudscraper.create_scraper(browser={"browser": "chrome", "platform": "windows", "desktop": True})
@@ -114,12 +120,15 @@ def get(url):
             _last_req[0] = time.time()
             if r.status_code == 404:
                 raise LookupError(f"not found: {url}")
-            if r.status_code >= 500 or "Just a moment" in r.text[:3000]:
+            if r.status_code in (403, 429) or "Just a moment" in r.text[:3000]:
+                _blocked[0] = f"ProCyclingStats turned the update away (HTTP {r.status_code}); saved results kept, will retry next run"
+                raise Blocked(_blocked[0])
+            if r.status_code >= 500:
                 raise ConnectionError(f"HTTP {r.status_code} from PCS")
             if r.status_code >= 400:
                 raise ConnectionError(f"HTTP {r.status_code} for {url}")
             return Page(url, r.text, r.url)
-        except LookupError:
+        except (LookupError, Blocked):
             raise
         except Exception:
             if attempt == 2:
@@ -373,11 +382,15 @@ def race_url(r, year, kind=None):
 # ---------------------------------------------------------------------------
 # Dates
 # ---------------------------------------------------------------------------
+_cal_tried = set()
 def load_calendar(state, year, errors):
     """World Tour calendar: {slug: (start, end)} for one year. Refreshed daily."""
     cal = state.setdefault("calendar", {}).setdefault(str(year), {})
     if cal.get("races") is not None and not older_than(cal.get("at"), 24):
         return cal["races"]
+    if year in _cal_tried:                     # one attempt per run, even if it failed
+        return cal.get("races") or {}
+    _cal_tried.add(year)
     try:
         page = get(f"{W}races.php?year={year}&circuit=1&filter=Filter")
     except Exception as e:
@@ -640,7 +653,8 @@ def update(state):
         eds = cur.get("editions", {})
         # drop anything written by the old (pre-redesign) job: bad dates, old-style addresses
         for y, e in list(eds.items()):
-            if (e.get("start") and not isodate(e["start"])) or (e.get("stages") and "/" in (e["stages"][0].get("url") or "/")):
+            old_url = re.match(r"race/[^/]+/\d{4}/", (e.get("stages") or [{}])[0].get("url") or "")
+            if (e.get("start") and not isodate(e["start"])) or old_url:
                 eds[y] = {}
         if r.get("wiki"):
             for y, e in list(eds.items()):
@@ -671,10 +685,13 @@ def update(state):
                 errors.append({"race": r["name"], "year": year, "what": "update", "msg": f"{type(e).__name__}: {e}"[:200]})
                 log(traceback.format_exc())
         rec["editions"] = {y: e for y, e in eds.items() if int(y) >= today.year - 1 and (e.get("start") or e.get("missing"))}
-        if not any(e.get("start") for e in rec["editions"].values()) and not any(x["race"] == r["name"] for x in errors):
+        if not _blocked[0] and not any(e.get("start") for e in rec["editions"].values()) and not any(x["race"] == r["name"] for x in errors):
             errors.append({"race": r["name"], "year": today.year, "what": "address",
                            "msg": f"No {today.year} or {today.year + 1} edition found at {race_url(r, today.year)}"})
         out.append(rec)
+    if _blocked[0]:
+        errors = [e for e in errors if "turned the update away" not in e["msg"]]
+        errors.insert(0, {"race": "ProCyclingStats", "year": today.year, "what": "access", "msg": _blocked[0]})
     return {"races": out, "errors": errors, "calendar": state.get("calendar", {})}
 
 def fingerprint(obj):
