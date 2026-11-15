@@ -641,6 +641,18 @@ def wiki(r, year, ed, errors):
         save_debug(f"wiki-cx-{year}", page, "race ran but no men's elite result read")
 
 # ---------------------------------------------------------------------------
+def racing_soon(out, state, today):
+    """Is any race on, starting within 10 days, or just finished (3 days)? Uses saved dates only, no network."""
+    spans = [(e["start"], e["end"]) for r in out for e in r["editions"].values() if e.get("start") and e.get("end")]
+    spans += [tuple(v) for c in (state.get("calendar") or {}).values() for v in (c.get("races") or {}).values()]
+    for a, b in spans:
+        try:
+            if d(a) - timedelta(days=10) <= today <= d(b) + timedelta(days=3):
+                return True
+        except Exception:
+            return True       # can't read a date: stay on the safe side and report
+    return False
+
 def update(state):
     errors = []
     today = today_utc()
@@ -691,7 +703,10 @@ def update(state):
         out.append(rec)
     if _blocked[0]:
         errors = [e for e in errors if "turned the update away" not in e["msg"]]
-        errors.insert(0, {"race": "ProCyclingStats", "year": today.year, "what": "access", "msg": _blocked[0]})
+        if racing_soon(out, state, today):
+            errors.insert(0, {"race": "ProCyclingStats", "year": today.year, "what": "access", "msg": _blocked[0]})
+        else:   # offseason: nothing to fetch anyway, so a block isn't worth a red X or a phone alert
+            log("PCS blocked us, but no race is on or within 10 days; not reporting it")
     return {"races": out, "errors": errors, "calendar": state.get("calendar", {})}
 
 def fingerprint(obj):
