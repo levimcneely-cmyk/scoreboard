@@ -12,7 +12,7 @@ const fs = require('fs'), path = require('path'), vm = require('vm');
 const ROOT = path.resolve(__dirname, '..');
 const DATA = process.env.DATA_DIR || path.join(ROOT, 'data');
 const TOPIC = process.env.NTFY_TOPIC || '';
-const SITE = process.env.SITE_URL || 'https://levimcneely-cmyk.github.io/scoreboard/';
+const SITE = process.env.SITE_URL || 'https://levimcneely.com/scoreboard/';
 const FULL_EVERY = 60 * 60e3;          // rebuild every team at least hourly
 const KEEP_POLLING_AHEAD = 3 * 3600e3; // keep the job alive if something starts within 3 hours
 const ALERT_AFTER = 90 * 60e3;         // a team failing this long triggers an alert
